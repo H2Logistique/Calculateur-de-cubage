@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Calculateur de Cubage - H2 LOGISTIQUE</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+
+        /* Mobile Swipe Logic */
+        .snap-container {
+            scroll-snap-type: x mandatory;
+            overflow-x: auto;
+            display: flex;
+            width: 100%;
+            height: calc(100dvh - 64px); /* Minus Header only (no bottom nav) */
+            scroll-behavior: smooth;
+        }
+        
+        .snap-section {
+            scroll-snap-align: start;
+            flex: 0 0 100%;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* Prevent Pull-to-refresh on mobile */
+        body {
+            overscroll-behavior-y: none;
+            touch-action: pan-x pan-y;
+        }
+
+        /* Desktop Layout Overrides */
+        @media (min-width: 1024px) {
+            .snap-container {
+                display: grid;
+                grid-template-columns: 40% 35% 25%; /* Requested Layout */
+                overflow-x: hidden;
+                height: calc(100dvh - 64px); /* Minus Header */
+                scroll-snap-type: none;
+            }
+            .snap-section {
+                width: auto;
+                height: 100%;
+                border-right: 1px solid #e2e8f0;
+            }
+            .snap-section:last-child {
+                border-right: none;
+            }
+            /* Hide Mobile Nav Select */
+            .mobile-nav-select {
+                display: none;
+            }
+        }
+
+        /* Utilities */
+        .touch-target {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.9);
+            z-index: 50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- Loading Screen -->
+    <div id="loading-overlay">
+        <div class="text-center">
+            <h2 class="text-2xl font-bold text-blue-600 mb-2">H2 LOGISTIQUE</h2>
+            <p class="text-slate-500">Chargement...</p>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 shadow-sm z-20 flex-shrink-0 relative">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-4">
+            <div class="flex flex-col">
+                <h1 class="text-xl font-bold text-blue-900 leading-tight">H2 LOGISTIQUE</h1>
+                <span class="text-xs text-slate-500 font-medium tracking-wide">CALCULATEUR</span>
+            </div>
+            
+            <!-- Mobile Navigation Dropdown -->
+            <div class="mobile-nav-select lg:hidden mt-1">
+                <select id="mobile-view-select" onchange="scrollToSection(this.value)" class="bg-slate-100 border border-slate-300 text-slate-700 text-xs rounded p-1 font-bold uppercase tracking-wider outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="0">Catalogue</option>
+                    <option value="1">Inventaire</option>
+                    <option value="2">Notes</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 hidden sm:block">
+                <span class="text-xs text-blue-600 uppercase font-bold block">Volume Total</span>
+                <span id="header-total-volume" class="text-lg font-bold text-blue-800">0.00</span>
+                <span class="text-xs text-blue-600">m³</span>
+            </div>
+            <!-- Mobile specific compact volume display -->
+            <div class="sm:hidden bg-blue-50 px-2 py-1 rounded border border-blue-100">
+                <span id="header-total-volume-mobile" class="text-sm font-bold text-blue-800">0.00</span>
+                <span class="text-[10px] text-blue-600">m³</span>
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="secureAction('sync')" class="p-2 text-slate-600 hover:text-emerald-600 hover:bg-slate-100 rounded-full transition" title="Synchroniser Cloud">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main id="main-container" class="snap-container bg-slate-50">
+        
+        <!-- MODULE 1: CATALOGUE (Gauche) -->
+        <section id="view-catalog" class="snap-section flex flex-col">
+            <div class="p-4 bg-white border-b border-slate-100 sticky top-0 z-10 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Catalogue
+                </h2>
+                
+                <!-- Room Selector -->
+                <div class="mb-3">
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pièce Active</label>
+                    <select id="room-selector" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                        <option value="Salon">Salon / Séjour</option>
+                        <option value="Cuisine">Cuisine</option>
+                        <option value="Chambre 1">Chambre 1</option>
+                        <option value="Chambre 2">Chambre 2</option>
+                        <option value="Chambre 3">Chambre 3</option>
+                        <option value="Bureau">Bureau</option>
+                        <option value="SDB">Salle de bain / WC</option>
+                        <option value="Entree">Entrée / Couloir</option>
+                        <option value="Garage">Garage / Cave</option>
+                        <option value="Exterieur">Extérieur</option>
+                        <option value="Divers">Divers</option>
+                    </select>
+                </div>
+
+                <!-- Search -->
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Rechercher un objet..." class="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                    <svg class="absolute left-3 top-2.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <!-- Clear Button -->
+                    <button id="clear-search-btn" onclick="clearSearch()" class="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600 hidden bg-white rounded-full p-0.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Add/Edit Form (Protected) -->
+                <details class="mt-3 group">
+                    <summary class="list-none cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 select-none">
+                        <span class="bg-blue-100 p-1 rounded group-open:bg-blue-200 transition">+ Créer / Modifier objet</span>
+                    </summary>
+                    <div class="mt-2 p-3 bg-slate-100 rounded-lg border border-slate-200">
+                        <input type="hidden" id="edit-item-id">
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <div class="col-span-2">
+                                <label class="text-xs text-slate-500">Nom</label>
+                                <input type="text" id="edit-item-name" class="w-full p-1 border rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500">Vol (m³)</label>
+                                <input type="number" step="0.01" id="edit-item-vol" class="w-full p-1 border rounded text-sm">
+                            </div>
+                        </div>
+                        <button onclick="secureAction('saveItem')" class="w-full bg-blue-600 text-white py-1.5 rounded text-sm font-medium hover:bg-blue-700 shadow-sm">Enregistrer</button>
+                    </div>
+                </details>
+            </div>
+
+            <!-- List -->
+            <div id="catalog-list" class="flex-1 overflow-y-auto p-2 space-y-2 pb-4">
+                <!-- Items injected by JS -->
+            </div>
+        </section>
+
+        <!-- MODULE 2: INVENTAIRE (Centre) -->
+        <section id="view-inventory" class="snap-section flex flex-col bg-slate-100 lg:bg-slate-50">
+            <div class="p-4 bg-white border-b border-slate-100 sticky top-0 z-10 flex justify-between items-center shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    Inventaire
+                </h2>
+                <div class="flex gap-2">
+                    <button onclick="copyInventoryToClipboard()" class="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1 rounded bg-blue-50 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        Copier
+                    </button>
+                    <button onclick="askClearInventory()" class="text-xs text-red-500 hover:text-red-700 font-medium border border-red-200 px-2 py-1 rounded bg-red-50 flex items-center gap-1">
+                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        Vider
+                    </button>
+                </div>
+            </div>
+
+            <div id="inventory-list" class="flex-1 overflow-y-auto p-2 pb-4">
+                <!-- Inventory groups injected by JS -->
+            </div>
+        </section>
+
+        <!-- MODULE 3: NOTES (Droite) -->
+        <section id="view-notes" class="snap-section flex flex-col">
+            <div class="p-4 bg-white border-b border-slate-100 sticky top-0 z-10 flex justify-between items-center shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    Notes
+                </h2>
+                <div class="flex gap-2">
+                    <button onclick="copyNotes()" class="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1 rounded bg-blue-50 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        Copier
+                    </button>
+                    <button onclick="askResetNotes()" class="text-xs text-red-500 hover:text-red-700 font-medium border border-red-200 px-2 py-1 rounded bg-red-50 flex items-center gap-1">
+                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        Vider
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 p-4 bg-yellow-50 lg:bg-white h-full pb-4">
+                <textarea id="notepad-area" class="w-full h-full bg-transparent resize-none outline-none text-sm text-slate-700 font-mono leading-relaxed" placeholder="Prendre des notes ici..."></textarea>
+            </div>
+        </section>
+    </main>
+
+    <!-- CONFIRMATION MODAL -->
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Confirmation</h3>
+            <p id="confirm-msg" class="text-sm text-slate-500 mb-4">...</p>
+            <div class="flex gap-2">
+                <button onclick="closeModal('confirm-modal')" class="flex-1 py-2 text-slate-600 font-medium bg-slate-100 rounded-lg hover:bg-slate-200">Non</button>
+                <button id="confirm-yes-btn" onclick="executeConfirm()" class="flex-1 py-2 text-white font-medium bg-red-600 rounded-lg hover:bg-red-700">Oui</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECURITY MODAL -->
+    <div id="security-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Accès Sécurisé Requis</h3>
+            <p class="text-sm text-slate-500 mb-4">Cette action nécessite un code d'authentification.</p>
+            <!-- Changed type to text as requested -->
+            <input type="text" id="security-code-input" class="w-full p-3 border border-slate-300 rounded-lg mb-4 text-center tracking-widest text-lg" placeholder="Code d'accès">
+            <div class="flex gap-2">
+                <button onclick="closeModal('security-modal')" class="flex-1 py-2 text-slate-600 font-medium bg-slate-100 rounded-lg hover:bg-slate-200">Annuler</button>
+                <button onclick="verifyCode()" class="flex-1 py-2 text-white font-medium bg-blue-600 rounded-lg hover:bg-blue-700">Valider</button>
+            </div>
+            <p id="security-error" class="text-center text-red-500 text-xs mt-2 hidden">Code incorrect</p>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
+        <span id="toast-msg">Action effectuée</span>
+    </div>
+
+    <script>
+        // --- 1. CONFIGURATION & STATE ---
+
+        // Données Initiales du Catalogue (~100 objets)
+        const INITIAL_CATALOG = [
+            { id: 1, name: "Armoire (1 porte)", vol: 1, cat: "General" },
+            { id: 2, name: "Armoire (2 portes coulissante)", vol: 2, cat: "General" },
+            { id: 3, name: "Armoire (2 portes)", vol: 2, cat: "General" },
+            { id: 4, name: "Armoire (3 portes coulissante)", vol: 3, cat: "General" },
+            { id: 5, name: "Armoire (3 portes)", vol: 3, cat: "General" },
+            { id: 6, name: "Armoire (4 porte)", vol: 4, cat: "General" },
+            { id: 7, name: "Armoire (4 portes coulissante)", vol: 4, cat: "General" },
+            { id: 8, name: "Aspirateur", vol: 0.3, cat: "General" },
+            { id: 9, name: "Bahut", vol: 2.5, cat: "General" },
+            { id: 10, name: "Banc", vol: 0.3, cat: "General" },
+            { id: 11, name: "Barbecue (grand)", vol: 1, cat: "General" },
+            { id: 12, name: "Barbecue (moyen)", vol: 0.5, cat: "General" },
+            { id: 13, name: "Barbecue (petit)", vol: 0.25, cat: "General" },
+            { id: 14, name: "Bibliothèque (grand)", vol: 1.5, cat: "General" },
+            { id: 15, name: "Bibliothèque (moyen)", vol: 1, cat: "General" },
+            { id: 16, name: "Bibliothèque (petit)", vol: 0.5, cat: "General" },
+            { id: 17, name: "Biblo", vol: 0.1, cat: "General" },
+            { id: 18, name: "Buffet", vol: 1.5, cat: "General" },
+            { id: 19, name: "Bureau (grand)", vol: 1.5, cat: "General" },
+            { id: 20, name: "Bureau (moyen) / Secrétaire", vol: 1, cat: "General" },
+            { id: 21, name: "Bureau (petit)", vol: 0.5, cat: "General" },
+            { id: 22, name: "Caisse plastique (grand)", vol: 0.5, cat: "General" },
+            { id: 23, name: "Caisse plastique (moyen)", vol: 0.2, cat: "General" },
+            { id: 24, name: "Caisson", vol: 0.3, cat: "General" },
+            { id: 25, name: "Canapé (2 places)", vol: 2, cat: "General" },
+            { id: 26, name: "Canapé (3 places)", vol: 3, cat: "General" },
+            { id: 27, name: "Canapé d'angle", vol: 3.5, cat: "General" },
+            { id: 28, name: "Carton livre", vol: 0.05, cat: "General" },
+            { id: 29, name: "Carton penderie", vol: 0.25, cat: "General" },
+            { id: 30, name: "Carton standard", vol: 0.1, cat: "General" },
+            { id: 31, name: "Carton vaisselle", vol: 0.1, cat: "General" },
+            { id: 32, name: "Chaîne HiFi", vol: 0.5, cat: "General" },
+            { id: 33, name: "Chaise", vol: 0.2, cat: "General" },
+            { id: 34, name: "Chaise de bureau", vol: 0.3, cat: "General" },
+            { id: 35, name: "Chaise pliante", vol: 0.1, cat: "General" },
+            { id: 36, name: "Chiffonnier / Semainier", vol: 0.5, cat: "General" },
+            { id: 37, name: "Climatiseur", vol: 0.3, cat: "General" },
+            { id: 38, name: "Coffre (grand)", vol: 1, cat: "General" },
+            { id: 39, name: "Coffre (moyen)", vol: 0.5, cat: "General" },
+            { id: 40, name: "Coffre (petit)", vol: 0.25, cat: "General" },
+            { id: 41, name: "Coiffeuse", vol: 0.5, cat: "General" },
+            { id: 42, name: "Commode 3 tiroirs / Commode", vol: 0.6, cat: "General" },
+            { id: 43, name: "Commode 6 tiroirs / Commode", vol: 1.2, cat: "General" },
+            { id: 44, name: "Congélateur coffre (moyen / grand)", vol: 1, cat: "General" },
+            { id: 45, name: "Congélateur coffre (petit)", vol: 0.5, cat: "General" },
+            { id: 46, name: "Console", vol: 0.5, cat: "General" },
+            { id: 47, name: "Decrochage ???", vol: 0, cat: "General" },
+            { id: 48, name: "Demontage / Remontage ???", vol: 0, cat: "General" },
+            { id: 49, name: "Desserte", vol: 0.3, cat: "General" },
+            { id: 50, name: "Divers / M3 supplementaire", vol: 1, cat: "General" },
+            { id: 51, name: "Echelle", vol: 0.15, cat: "General" },
+            { id: 52, name: "Ecran", vol: 0.2, cat: "General" },
+            { id: 53, name: "Etabli", vol: 1.3, cat: "General" },
+            { id: 54, name: "Etagère", vol: 0.5, cat: "General" },
+            { id: 55, name: "Fauteuil", vol: 1, cat: "General" },
+            { id: 56, name: "Fauteuil (petit)", vol: 0.5, cat: "General" },
+            { id: 57, name: "Four", vol: 1, cat: "General" },
+            { id: 58, name: "Fragile ???", vol: 0, cat: "General" },
+            { id: 59, name: "Guéridon", vol: 0.5, cat: "General" },
+            { id: 60, name: "Imprimante", vol: 0.3, cat: "General" },
+            { id: 61, name: "Jardinière", vol: 0.3, cat: "General" },
+            { id: 62, name: "Lampadaire / Halogène", vol: 0.5, cat: "General" },
+            { id: 63, name: "Lampadaire / Halogène (petit)", vol: 0.25, cat: "General" },
+            { id: 64, name: "Lampe", vol: 0.2, cat: "General" },
+            { id: 65, name: "Lave vaisselle", vol: 1, cat: "General" },
+            { id: 66, name: "Lit (1 place)", vol: 1, cat: "General" },
+            { id: 67, name: "Lit (2 place)", vol: 2, cat: "General" },
+            { id: 68, name: "Lit bébé", vol: 1.2, cat: "General" },
+            { id: 69, name: "Lit coffre (1 place)", vol: 1, cat: "General" },
+            { id: 70, name: "Lit coffre (2 places)", vol: 2, cat: "General" },
+            { id: 71, name: "Lit superposé / Mezzanine", vol: 2.5, cat: "General" },
+            { id: 72, name: "Lustre / Plafonnier", vol: 0.25, cat: "General" },
+            { id: 73, name: "Machine à laver", vol: 1, cat: "General" },
+            { id: 74, name: "Meuble à chaussures", vol: 1, cat: "General" },
+            { id: 75, name: "Meuble à chaussures (petit)", vol: 0.5, cat: "General" },
+            { id: 76, name: "Meuble haut/bas (1 porte)", vol: 0.5, cat: "General" },
+            { id: 77, name: "Meuble haut/bas (2 porte)", vol: 1, cat: "General" },
+            { id: 78, name: "Meuble haut/bas (3 porte)", vol: 1.5, cat: "General" },
+            { id: 79, name: "Meuble haut/bas (4 porte)", vol: 2, cat: "General" },
+            { id: 80, name: "Meuble Kallax (12 cases)", vol: 1, cat: "General" },
+            { id: 81, name: "Meuble Kallax (4 cases)", vol: 0.3, cat: "General" },
+            { id: 82, name: "Meuble Kallax (8 cases)", vol: 0.6, cat: "General" },
+            { id: 83, name: "Meuble TV", vol: 1, cat: "General" },
+            { id: 84, name: "Meuble TV (grand)", vol: 1.5, cat: "General" },
+            { id: 85, name: "Meuble TV (petit)", vol: 0.5, cat: "General" },
+            { id: 86, name: "Micro ondes", vol: 0.3, cat: "General" },
+            { id: 87, name: "Miroir (grand)", vol: 0.4, cat: "General" },
+            { id: 88, name: "Miroir (moyen)", vol: 0.2, cat: "General" },
+            { id: 89, name: "Miroir (petit)", vol: 0.1, cat: "General" },
+            { id: 90, name: "Ordinateur", vol: 0.1, cat: "General" },
+            { id: 91, name: "Panière à linge", vol: 0.3, cat: "General" },
+            { id: 92, name: "Parasol", vol: 0.3, cat: "General" },
+            { id: 93, name: "Petit électroménager", vol: 0.2, cat: "General" },
+            { id: 94, name: "Piano droit", vol: 2, cat: "General" },
+            { id: 95, name: "Piano électrique", vol: 0.3, cat: "General" },
+            { id: 96, name: "Plante (grand)", vol: 1, cat: "General" },
+            { id: 97, name: "Plante (moyen)", vol: 0.5, cat: "General" },
+            { id: 98, name: "Plante (petit)", vol: 0.25, cat: "General" },
+            { id: 99, name: "Plaque cuisson", vol: 0.3, cat: "General" },
+            { id: 100, name: "Porte manteaux", vol: 0.2, cat: "General" },
+            { id: 101, name: "Poubelle", vol: 0.2, cat: "General" },
+            { id: 102, name: "Pouf", vol: 0.5, cat: "General" },
+            { id: 103, name: "Pousette", vol: 0.5, cat: "General" },
+            { id: 104, name: "Refrigérateur", vol: 1, cat: "General" },
+            { id: 105, name: "Refrigérateur américain", vol: 2, cat: "General" },
+            { id: 106, name: "Sac", vol: 0.2, cat: "General" },
+            { id: 107, name: "Sèche linge", vol: 1, cat: "General" },
+            { id: 108, name: "Table (4p)", vol: 1, cat: "General" },
+            { id: 109, name: "Table (6p)", vol: 1.5, cat: "General" },
+            { id: 110, name: "Table (8p)", vol: 2, cat: "General" },
+            { id: 111, name: "Table à langer", vol: 1, cat: "General" },
+            { id: 112, name: "Table à repasser", vol: 0.15, cat: "General" },
+            { id: 113, name: "Table basse", vol: 0.5, cat: "General" },
+            { id: 114, name: "Table d'appoint", vol: 0.25, cat: "General" },
+            { id: 115, name: "Table de chevet", vol: 0.25, cat: "General" },
+            { id: 116, name: "Table pliante", vol: 0.25, cat: "General" },
+            { id: 117, name: "Tableau / Affiche (grand)", vol: 0.25, cat: "General" },
+            { id: 118, name: "Tableau / Affiche (moyen)", vol: 0.15, cat: "General" },
+            { id: 119, name: "Tableau / Affiche (petit)", vol: 0.1, cat: "General" },
+            { id: 120, name: "Tablette", vol: 0.2, cat: "General" },
+            { id: 121, name: "Tabouret", vol: 0.15, cat: "General" },
+            { id: 122, name: "Tabouret haut", vol: 0.3, cat: "General" },
+            { id: 123, name: "Tapis", vol: 0.2, cat: "General" },
+            { id: 124, name: "Tapis de course", vol: 0.5, cat: "General" },
+            { id: 125, name: "Tête de lit", vol: 0.4, cat: "General" },
+            { id: 126, name: "Tondeuse", vol: 0.4, cat: "General" },
+            { id: 127, name: "TV", vol: 0.3, cat: "General" },
+            { id: 128, name: "Vaisselier (1 porte)", vol: 1, cat: "General" },
+            { id: 129, name: "Vaisselier (2 porte)", vol: 2, cat: "General" },
+            { id: 130, name: "Vaisselier (3 porte)", vol: 3, cat: "General" },
+            { id: 131, name: "Vaisselier (4 porte)", vol: 4, cat: "General" },
+            { id: 132, name: "Valise", vol: 0.3, cat: "General" },
+            { id: 133, name: "Vase", vol: 0.15, cat: "General" },
+            { id: 134, name: "Vase (grand)", vol: 0.3, cat: "General" },
+            { id: 135, name: "Vélo", vol: 0.3, cat: "General" },
+            { id: 136, name: "Vélo elliptique", vol: 0.5, cat: "General" },
+            { id: 137, name: "Ventilateur", vol: 0.2, cat: "General" }
+        ];
+
+        const DEFAULT_NOTES = ` 
+Adresse de chargement : 
+
+Logement : 
+Étage : 
+Escalier : 
+Ascenseur : 
+Portage : 
+Autre :
+
+——
+Adresse de déchargement : 
+
+Logement :
+Étage :
+Escalier :
+Ascenseur : 
+Portage : 
+Autre : 
+
+——
+Date du déménagement :
+
+——
+Inventaire : 
+
+`;
+
+        // State Global
+        let state = {
+            catalog: JSON.parse(localStorage.getItem('h2_catalog')) || INITIAL_CATALOG,
+            inventory: JSON.parse(localStorage.getItem('h2_inventory')) || [], // Structure: [{itemId, name, vol, qty, room}]
+            notes: localStorage.getItem('h2_notes') || DEFAULT_NOTES,
+            currentRoom: 'Salon'
+        };
+
+        // Firebase Vars
+        let db, auth;
+        let pendingSecureAction = null; // Store function to run after code verify
+        
+        // Modal Vars
+        let currentConfirmCallback = null;
+
+        // --- 2. INITIALISATION ---
+
+        const initApp = async () => {
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'h2-logistique';
+            
+            if (Object.keys(firebaseConfig).length > 0) {
+                const app = firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
+                    setupRealtimeListener(appId);
+                } catch (e) {
+                    console.error("Auth Error", e);
+                }
+            }
+
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('notepad-area').value = state.notes;
+            
+            // Set initial Select value
+            document.getElementById('mobile-view-select').value = "0";
+
+            renderCatalog();
+            renderInventory();
+            updateTotalHeader();
+            setupEventListeners();
+        };
+
+        // --- 3. RENDERING ---
+
+        function renderCatalog() {
+            const listEl = document.getElementById('catalog-list');
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const room = state.currentRoom;
+            
+            // Filter catalog
+            const filtered = state.catalog.filter(item => 
+                item.name.toLowerCase().includes(search)
+            );
+
+            listEl.innerHTML = '';
+
+            filtered.forEach(item => {
+                // Find current quantity for this item in this room
+                const invItem = state.inventory.find(i => i.itemId === item.id && i.room === room);
+                const currentQty = invItem ? invItem.qty : 0;
+
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-300 transition-colors";
+                
+                // Logic for style based on qty
+                const activeStyle = currentQty > 0 ? "border-l-4 border-l-blue-500" : "";
+                if(currentQty > 0) div.classList.add('bg-blue-50/30');
+
+                div.innerHTML = `
+                    <div class="flex-1 pr-2">
+                        <div class="font-semibold text-sm text-slate-800">${item.name}</div>
+                        <div class="text-xs text-slate-500 font-mono">${item.vol.toFixed(2)} m³</div>
+                        <div class="flex gap-2 mt-1">
+                             <button onclick="secureAction('edit', ${item.id})" class="text-[10px] text-blue-400 hover:text-blue-600 underline">Modifier</button>
+                             <button onclick="secureAction('deleteCatalogItem', ${item.id})" class="text-[10px] text-slate-300 hover:text-red-500 underline flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                Suppr.
+                             </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5 shadow-sm">
+                        <button onclick="updateQty('${room}', ${item.id}, -1)" class="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-red-600 hover:bg-white rounded transition active:scale-95 touch-target ${currentQty === 0 ? 'opacity-30 pointer-events-none' : ''}">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                        </button>
+                        
+                        <span class="w-6 text-center font-bold text-sm text-slate-800">${currentQty}</span>
+                        
+                        <button onclick="addToInventory(${item.id})" class="w-9 h-9 flex items-center justify-center text-blue-600 hover:bg-white rounded transition active:scale-95 touch-target">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                    </div>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        function renderInventory() {
+            const listEl = document.getElementById('inventory-list');
+            
+            if (state.inventory.length === 0) {
+                listEl.innerHTML = `
+                    <div id="empty-state" class="flex flex-col items-center justify-center h-64 text-slate-400">
+                        <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                        <p class="text-sm">Aucun objet ajouté</p>
+                        <p class="text-xs mt-1">Sélectionnez une pièce et ajoutez des objets.</p>
+                    </div>`;
+                return;
+            }
+            
+            listEl.innerHTML = '';
+
+            // Group by Room
+            const grouped = state.inventory.reduce((acc, item) => {
+                acc[item.room] = acc[item.room] || [];
+                acc[item.room].push(item);
+                return acc;
+            }, {});
+
+            // Render groups
+            Object.keys(grouped).forEach(room => {
+                const roomItems = grouped[room];
+                const roomTotal = roomItems.reduce((sum, item) => sum + (item.vol * item.qty), 0);
+                
+                const section = document.createElement('div');
+                section.className = "mb-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm";
+                
+                // Room Header
+                section.innerHTML = `
+                    <div class="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
+                        <span class="font-bold text-sm text-slate-700 uppercase tracking-wide">${room}</span>
+                        <span class="text-xs font-mono font-bold text-blue-600">${roomTotal.toFixed(2)} m³</span>
+                    </div>
+                    <div class="divide-y divide-slate-50">
+                        ${roomItems.map(item => `
+                            <div class="p-3 flex items-center justify-between">
+                                <div class="flex-1">
+                                    <div class="text-sm font-medium text-slate-800">${item.name}</div>
+                                    <div class="text-[10px] text-slate-400">PU: ${item.vol} | Total: ${(item.vol * item.qty).toFixed(2)}</div>
+                                </div>
+                                <div class="flex items-center gap-2 bg-slate-50 rounded-lg p-0.5 border border-slate-100">
+                                    <button onclick="updateQty('${item.room}', ${item.itemId}, -1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-500 hover:bg-white rounded transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                                    </button>
+                                    <span class="w-6 text-center font-bold text-sm text-slate-700">${item.qty}</span>
+                                    <button onclick="updateQty('${item.room}', ${item.itemId}, 1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-blue-500 hover:bg-white rounded transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                listEl.appendChild(section);
+            });
+        }
+
+        function updateTotalHeader() {
+            const total = state.inventory.reduce((sum, item) => sum + (item.vol * item.qty), 0);
+            document.getElementById('header-total-volume').textContent = total.toFixed(2);
+            document.getElementById('header-total-volume-mobile').textContent = total.toFixed(2);
+        }
+
+        // --- 4. LOGIC & ACTIONS ---
+
+        function addToInventory(itemId) {
+            const catalogItem = state.catalog.find(i => i.id === itemId);
+            if (!catalogItem) return;
+
+            const room = document.getElementById('room-selector').value;
+            const existing = state.inventory.find(i => i.itemId === itemId && i.room === room);
+
+            if (existing) {
+                existing.qty++;
+            } else {
+                state.inventory.push({
+                    itemId: catalogItem.id,
+                    name: catalogItem.name,
+                    vol: catalogItem.vol,
+                    qty: 1,
+                    room: room
+                });
+            }
+            
+            saveData();
+            // Refresh both to update totals and qty indicators
+            renderCatalog();
+            renderInventory();
+            updateTotalHeader();
+        }
+
+        function updateQty(room, itemId, delta) {
+            const idx = state.inventory.findIndex(i => i.itemId === itemId && i.room === room);
+            if (idx === -1) {
+                // If trying to add from 0 via catalog minus button (should be impossible)
+                if (delta > 0) addToInventory(itemId); 
+                return;
+            }
+
+            state.inventory[idx].qty += delta;
+
+            if (state.inventory[idx].qty <= 0) {
+                state.inventory.splice(idx, 1);
+            }
+            
+            saveData();
+            renderCatalog();
+            renderInventory();
+            updateTotalHeader();
+        }
+
+        // --- 5. CATALOG MANAGEMENT (SECURED) ---
+
+        function saveCatalogItem() {
+            const idInput = document.getElementById('edit-item-id').value;
+            const name = document.getElementById('edit-item-name').value;
+            const vol = parseFloat(document.getElementById('edit-item-vol').value);
+
+            if (!name || isNaN(vol)) {
+                alert("Veuillez remplir le nom et le volume.");
+                return;
+            }
+
+            if (idInput) {
+                const idx = state.catalog.findIndex(i => i.id == idInput);
+                if (idx !== -1) {
+                    state.catalog[idx].name = name;
+                    state.catalog[idx].vol = vol;
+                }
+            } else {
+                const newId = Date.now();
+                state.catalog.push({ id: newId, name, vol, cat: 'Custom' });
+            }
+
+            // Reset Form
+            document.getElementById('edit-item-id').value = '';
+            document.getElementById('edit-item-name').value = '';
+            document.getElementById('edit-item-vol').value = '';
+            document.querySelector('details').removeAttribute('open');
+
+            saveData();
+            renderCatalog();
+            showToast("Catalogue mis à jour");
+        }
+
+        function deleteCatalogItem(id) {
+            // Replaced native confirm with direct action secured by auth code or just remove if easy
+            // But per request "Supprimer définitivement..."
+            openConfirm("Supprimer définitivement cet objet du catalogue ?", () => {
+                const idx = state.catalog.findIndex(i => i.id === id);
+                if(idx !== -1) {
+                    state.catalog.splice(idx, 1);
+                    saveData();
+                    renderCatalog();
+                    showToast("Objet supprimé du catalogue");
+                }
+            });
+        }
+
+        function loadItemForEdit(id) {
+            const item = state.catalog.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('edit-item-id').value = item.id;
+            document.getElementById('edit-item-name').value = item.name;
+            document.getElementById('edit-item-vol').value = item.vol;
+            document.querySelector('details').setAttribute('open', 'true');
+            document.querySelector('details').scrollIntoView({behavior: 'smooth'});
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = '';
+            renderCatalog();
+            // Hide button
+            document.getElementById('clear-search-btn').classList.add('hidden');
+            searchInput.focus();
+        }
+
+        // --- 6. SECURITY & CONFIRM SYSTEM ---
+        
+        // Modal Confirm Logic (Replaces native confirm)
+        function openConfirm(msg, callback) {
+            document.getElementById('confirm-msg').textContent = msg;
+            currentConfirmCallback = callback;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+            document.getElementById('confirm-modal').classList.add('flex');
+        }
+
+        function executeConfirm() {
+            if (currentConfirmCallback) currentConfirmCallback();
+            closeModal('confirm-modal');
+            currentConfirmCallback = null;
+        }
+
+        function askClearInventory() {
+            openConfirm("Voulez-vous vraiment vider tout l'inventaire ?", () => {
+                state.inventory = [];
+                saveData();
+                renderCatalog(); 
+                renderInventory();
+                updateTotalHeader();
+                showToast("Inventaire vidé");
+            });
+        }
+        
+        function askResetNotes() {
+             openConfirm("Voulez-vous vraiment vider toutes les notes et revenir au modèle par défaut ?", () => {
+                state.notes = DEFAULT_NOTES;
+                document.getElementById('notepad-area').value = DEFAULT_NOTES;
+                saveData();
+                showToast("Notes réinitialisées");
+             });
+        }
+
+        function secureAction(actionType, param = null) {
+            pendingSecureAction = { type: actionType, param: param };
+            document.getElementById('security-code-input').value = '';
+            document.getElementById('security-error').classList.add('hidden');
+            document.getElementById('security-modal').classList.remove('hidden');
+            document.getElementById('security-modal').classList.add('flex');
+            setTimeout(() => document.getElementById('security-code-input').focus(), 100);
+        }
+
+        function verifyCode() {
+            const input = document.getElementById('security-code-input').value;
+            if (input === "Helmi2025") {
+                closeModal('security-modal');
+                executeSecureAction();
+            } else {
+                document.getElementById('security-error').classList.remove('hidden');
+            }
+        }
+
+        function executeSecureAction() {
+            if (!pendingSecureAction) return;
+            
+            const { type, param } = pendingSecureAction;
+            
+            switch(type) {
+                case 'saveItem':
+                    saveCatalogItem();
+                    break;
+                case 'edit':
+                    loadItemForEdit(param);
+                    break;
+                case 'deleteCatalogItem':
+                    deleteCatalogItem(param);
+                    break;
+                case 'sync':
+                    performFirebaseSync();
+                    break;
+            }
+            pendingSecureAction = null;
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
+        }
+
+        // --- 7. SYNC & PERSISTENCE ---
+
+        function saveData() {
+            localStorage.setItem('h2_catalog', JSON.stringify(state.catalog));
+            localStorage.setItem('h2_inventory', JSON.stringify(state.inventory));
+            localStorage.setItem('h2_notes', state.notes);
+        }
+
+        async function performFirebaseSync() {
+            if (!auth.currentUser || !db) {
+                showToast("Erreur: Non connecté au Cloud");
+                return;
+            }
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'h2-logistique';
+            const dataRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
+
+            try {
+                await dataRef.set({
+                    catalog: state.catalog,
+                    inventory: state.inventory,
+                    notes: state.notes,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showToast("Synchronisation réussie !");
+            } catch (err) {
+                console.error("Sync failed", err);
+                showToast("Erreur de synchronisation");
+            }
+        }
+
+        function setupRealtimeListener(appId) {
+             if (!auth.currentUser) return;
+             
+             const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
+             
+             docRef.onSnapshot((doc) => {
+                 if (doc.exists) {
+                     const remoteData = doc.data();
+                     if (remoteData.inventory && remoteData.catalog) {
+                         state.inventory = remoteData.inventory;
+                         state.catalog = remoteData.catalog;
+                         if (!state.notes || state.notes === DEFAULT_NOTES) {
+                             state.notes = remoteData.notes;
+                             document.getElementById('notepad-area').value = state.notes;
+                         }
+                         
+                         saveData();
+                         renderCatalog();
+                         renderInventory();
+                         updateTotalHeader();
+                     }
+                 }
+             }, (error) => {
+                 console.error("Listener error:", error);
+             });
+        }
+
+        // --- 8. UTILITIES ---
+
+        function setupEventListeners() {
+            // Search Debounce with clear button toggle
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                const btn = document.getElementById('clear-search-btn');
+                if(e.target.value.length > 0) btn.classList.remove('hidden');
+                else btn.classList.add('hidden');
+                renderCatalog();
+            });
+
+            // Room Selector
+            document.getElementById('room-selector').addEventListener('change', (e) => {
+                state.currentRoom = e.target.value;
+                renderCatalog(); // Update list to show correct qty for new room
+            });
+
+            // Notepad Auto-save
+            const notepad = document.getElementById('notepad-area');
+            let noteTimeout;
+            notepad.addEventListener('input', (e) => {
+                clearTimeout(noteTimeout);
+                noteTimeout = setTimeout(() => {
+                    state.notes = e.target.value;
+                    saveData();
+                }, 500);
+            });
+
+            // Scroll Spy for Mobile Nav Select
+            const container = document.getElementById('main-container');
+            container.addEventListener('scroll', () => {
+                if (window.innerWidth >= 1024) return;
+                
+                const scrollLeft = container.scrollLeft;
+                const width = container.offsetWidth;
+                const index = Math.round(scrollLeft / width);
+                
+                const select = document.getElementById('mobile-view-select');
+                if(select.value != index) select.value = index;
+            });
+        }
+
+        function scrollToSection(index) {
+            const container = document.getElementById('main-container');
+            const width = container.offsetWidth;
+            container.scrollTo({
+                left: width * index,
+                behavior: 'smooth'
+            });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            const tm = document.getElementById('toast-msg');
+            tm.textContent = msg;
+            t.classList.remove('opacity-0');
+            setTimeout(() => t.classList.add('opacity-0'), 2500);
+        }
+
+        // --- COPY FUNCTIONS ---
+
+        function copyInventoryToClipboard() {
+            if (state.inventory.length === 0) {
+                showToast("Inventaire vide");
+                return;
+            }
+
+            let text = "";
+            
+            // Group by Room
+            const grouped = state.inventory.reduce((acc, item) => {
+                acc[item.room] = acc[item.room] || [];
+                acc[item.room].push(item);
+                return acc;
+            }, {});
+
+            // Sort rooms alphabetically for consistency
+            const sortedRooms = Object.keys(grouped).sort();
+
+            sortedRooms.forEach(room => {
+                text += `${room.toUpperCase()}\n`; // Pièce
+                grouped[room].forEach(item => {
+                    // Modification ici : Ajout de \t (tabulation) pour séparer les colonnes Excel
+                    text += `${item.name}\t${item.qty}\n`; 
+                });
+                text += "\n"; // Spacing between rooms
+            });
+
+            // Add Total at the end for utility
+            const total = state.inventory.reduce((sum, item) => sum + (item.vol * item.qty), 0);
+            text += `TOTAL:\t${total.toFixed(2)} m³`;
+
+            fallbackCopyText(text, "Inventaire copié");
+        }
+
+        function copyNotes() {
+            const text = document.getElementById('notepad-area').value;
+            fallbackCopyText(text, "Notes copiées");
+        }
+        
+        // Robust Copy Function (Works better in iframes/mobile than clipboard API)
+        function fallbackCopyText(text, successMsg) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // Avoid scrolling to bottom
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if(successful) showToast(successMsg);
+                else showToast("Erreur copie");
+            } catch (err) {
+                showToast("Erreur copie");
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        // Start App
+        window.addEventListener('load', initApp);
+
+    </script>
+</body>
+</html>
