@@ -191,6 +191,27 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                 </div>
+
+                <!-- Add/Edit Form (Protected) -->
+                <details class="mt-3 group">
+                    <summary class="list-none cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 select-none">
+                        <span class="bg-blue-100 p-1 rounded group-open:bg-blue-200 transition">+ Créer / Modifier objet</span>
+                    </summary>
+                    <div class="mt-2 p-3 bg-slate-100 rounded-lg border border-slate-200">
+                        <input type="hidden" id="edit-item-id">
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <div class="col-span-2">
+                                <label class="text-xs text-slate-500">Nom</label>
+                                <input type="text" id="edit-item-name" class="w-full p-1 border rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500">Vol (m³)</label>
+                                <input type="number" step="0.01" id="edit-item-vol" class="w-full p-1 border rounded text-sm">
+                            </div>
+                        </div>
+                        <button onclick="secureAction('saveItem')" class="w-full bg-blue-600 text-white py-1.5 rounded text-sm font-medium hover:bg-blue-700 shadow-sm">Enregistrer</button>
+                    </div>
+                </details>
             </div>
 
             <!-- List -->
@@ -290,7 +311,7 @@
     <script>
         // --- 1. CONFIGURATION & STATE ---
 
-        // Données Initiales du Catalogue (~100 objets)
+         // Données Initiales du Catalogue (~100 objets)
         const INITIAL_CATALOG = [
             { id: 1, name: "Armoire (1 porte)", vol: 1, cat: "General" },
             { id: 2, name: "Armoire (2 portes coulissante)", vol: 2, cat: "General" },
@@ -485,7 +506,7 @@ Inventaire :
             catalog: JSON.parse(localStorage.getItem('h2_catalog')) || INITIAL_CATALOG,
             inventory: JSON.parse(localStorage.getItem('h2_inventory')) || [], // Structure: [{itemId, name, vol, qty, room}]
             notes: localStorage.getItem('h2_notes') || DEFAULT_NOTES,
-            currentRoom: 'Salon'
+            currentRoom: 'Generale'
         };
 
         // Firebase Vars
@@ -521,9 +542,6 @@ Inventaire :
             document.getElementById('loading-overlay').style.display = 'none';
             document.getElementById('notepad-area').value = state.notes;
             
-            // Set initial Select value
-            // document.getElementById('mobile-view-select').value = "0"; // Removed
-
             renderCatalog();
             renderInventory();
             updateTotalHeader();
@@ -560,6 +578,13 @@ Inventaire :
                     <div class="flex-1 pr-2">
                         <div class="font-semibold text-sm text-slate-800">${item.name}</div>
                         <div class="text-xs text-slate-500 font-mono">${item.vol.toFixed(2)} m³</div>
+                        <div class="flex gap-2 mt-1">
+                             <button onclick="secureAction('edit', ${item.id})" class="text-[10px] text-blue-400 hover:text-blue-600 underline">Modifier</button>
+                             <button onclick="secureAction('deleteCatalogItem', ${item.id})" class="text-[10px] text-slate-300 hover:text-red-500 underline flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                Suppr.
+                             </button>
+                        </div>
                     </div>
                     
                     <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5 shadow-sm">
@@ -692,9 +717,81 @@ Inventaire :
             updateTotalHeader();
         }
 
-        // --- 5. CATALOG MANAGEMENT (SECURED) ---
+        // --- 5. CATALOG MANAGEMENT (SECURED & CLOUD SYNCED) ---
 
-        // (Fonctions d'édition supprimées pour alléger le code)
+        function saveCatalogItem() {
+            const idInput = document.getElementById('edit-item-id').value;
+            const name = document.getElementById('edit-item-name').value;
+            const vol = parseFloat(document.getElementById('edit-item-vol').value);
+
+            if (!name || isNaN(vol)) {
+                alert("Veuillez remplir le nom et le volume.");
+                return;
+            }
+
+            if (idInput) {
+                const idx = state.catalog.findIndex(i => i.id == idInput);
+                if (idx !== -1) {
+                    state.catalog[idx].name = name;
+                    state.catalog[idx].vol = vol;
+                }
+            } else {
+                const newId = Date.now();
+                state.catalog.push({ id: newId, name, vol, cat: 'Custom' });
+            }
+
+            // Reset Form
+            document.getElementById('edit-item-id').value = '';
+            document.getElementById('edit-item-name').value = '';
+            document.getElementById('edit-item-vol').value = '';
+            document.querySelector('details').removeAttribute('open');
+
+            // UPDATE LOCAL & CLOUD
+            saveData();
+            updateCloudCatalog(); // <-- Cloud Sync Magic
+            renderCatalog();
+            showToast("Catalogue mis à jour et diffusé !");
+        }
+
+        function deleteCatalogItem(id) {
+            openConfirm("Supprimer définitivement cet objet du catalogue pour TOUS les utilisateurs ?", () => {
+                const idx = state.catalog.findIndex(i => i.id === id);
+                if(idx !== -1) {
+                    state.catalog.splice(idx, 1);
+                    saveData();
+                    updateCloudCatalog(); // <-- Cloud Sync Magic
+                    renderCatalog();
+                    showToast("Objet supprimé du catalogue Cloud");
+                }
+            });
+        }
+
+        async function updateCloudCatalog() {
+            if (!auth.currentUser || !db) return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'h2-logistique';
+            const dataRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
+            
+            try {
+                // Only update catalog field, preserving other users' inventory/notes if they were in the same doc
+                await dataRef.set({
+                    catalog: state.catalog,
+                    lastCatalogUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            } catch (err) {
+                console.error("Cloud Catalog Update Failed", err);
+            }
+        }
+
+        function loadItemForEdit(id) {
+            const item = state.catalog.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('edit-item-id').value = item.id;
+            document.getElementById('edit-item-name').value = item.name;
+            document.getElementById('edit-item-vol').value = item.vol;
+            document.querySelector('details').setAttribute('open', 'true');
+            document.querySelector('details').scrollIntoView({behavior: 'smooth'});
+        }
 
         function clearSearch() {
             const searchInput = document.getElementById('search-input');
@@ -750,7 +847,7 @@ Inventaire :
 
         function verifyCode() {
             const input = document.getElementById('security-code-input').value;
-            if (input === "Helmi2025") {
+            if (input === "abc") {
                 closeModal('security-modal');
                 executeSecureAction();
             } else {
@@ -764,6 +861,15 @@ Inventaire :
             const { type, param } = pendingSecureAction;
             
             switch(type) {
+                case 'saveItem':
+                    saveCatalogItem();
+                    break;
+                case 'edit':
+                    loadItemForEdit(param);
+                    break;
+                case 'deleteCatalogItem':
+                    deleteCatalogItem(param);
+                    break;
                 case 'sync':
                     performFirebaseSync();
                     break;
@@ -804,13 +910,15 @@ Inventaire :
             const dataRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
 
             try {
+                // Full Sync (Manual) - Be careful not to overwrite catalog if someone else updated it
+                // Ideally this button handles Inventory/Notes sync primarily
                 await dataRef.set({
-                    catalog: state.catalog,
+                    // catalog: state.catalog, // Don't overwrite catalog blindly here unless intended
                     inventory: state.inventory,
                     notes: state.notes,
                     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                showToast("Tout synchronisé avec succès !");
+                }, { merge: true });
+                showToast("Données synchronisées !");
             } catch (err) {
                 console.error("Sync failed", err);
                 showToast("Erreur de synchronisation");
@@ -826,26 +934,31 @@ Inventaire :
                  if (doc.exists) {
                      const remoteData = doc.data();
                      
-                     // Mise à jour automatique du catalogue pour tout le monde
-                     if (remoteData.catalog) {
-                         // On vérifie si le catalogue est différent pour éviter des re-render inutiles si on est l'émetteur
-                         // (Simplifié ici : on met à jour)
-                         state.catalog = remoteData.catalog;
-                         renderCatalog(); // Met à jour l'affichage immédiatement
+                     // CLOUD CATALOG PRIORITY
+                     if (remoteData.catalog && Array.isArray(remoteData.catalog) && remoteData.catalog.length > 0) {
+                         // Only update if different stringified to avoid loop/redraw
+                         if (JSON.stringify(state.catalog) !== JSON.stringify(remoteData.catalog)) {
+                             console.log("Mise à jour du catalogue reçue depuis le Cloud");
+                             state.catalog = remoteData.catalog;
+                             renderCatalog(); 
+                             saveData();
+                         }
+                     } else {
+                         // If Cloud is empty (first run), Seed it with INITIAL_CATALOG
+                         if(state.catalog.length > 0) {
+                             console.log("Amorçage du catalogue Cloud...");
+                             updateCloudCatalog();
+                         }
                      }
 
-                     if (remoteData.inventory) {
+                     // Optional: Sync Inventory if you want shared sessions (multiplayer mode)
+                     // If you want each user to have their own inventory, remove this block
+                     /* if (remoteData.inventory) {
                          state.inventory = remoteData.inventory;
                          renderInventory();
                          updateTotalHeader();
-                     }
-                     
-                     if (remoteData.notes && (!state.notes || state.notes === DEFAULT_NOTES)) {
-                         state.notes = remoteData.notes;
-                         document.getElementById('notepad-area').value = state.notes;
-                     }
-                     
-                     saveData();
+                     } 
+                     */
                  }
              }, (error) => {
                  console.error("Listener error:", error);
@@ -951,7 +1064,4 @@ Inventaire :
 
     </script>
 </body>
-
 </html>
-
-
