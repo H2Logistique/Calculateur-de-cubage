@@ -15,32 +15,16 @@
 
     <style>
         /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f5f9; 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #94a3b8; 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #64748b; 
-        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
         /* Prevent Pull-to-refresh on mobile */
-        body {
-            overscroll-behavior-y: none;
-            touch-action: pan-x pan-y;
-        }
+        body { overscroll-behavior-y: none; touch-action: pan-x pan-y; }
 
         /* Utilities */
-        .touch-target {
-            min-height: 44px;
-            min-width: 44px;
-        }
+        .touch-target { min-height: 44px; min-width: 44px; }
         
         /* Layout Mobile/Tablet Slide Logic */
         .slide-container {
@@ -52,7 +36,6 @@
             height: calc(100dvh - 64px);
             scroll-snap-type: x mandatory;
         }
-
         .slide-section {
             height: 100%;
             overflow-y: auto;
@@ -61,54 +44,35 @@
         }
 
         /* Responsive Widths */
-        /* Mobile: 90% width to show a peek of the next section, encouraging swipe */
         @media (max-width: 767px) {
-            .slide-section {
-                width: 90vw; 
-                margin-right: 10px; /* Spacing between cards */
-            }
-            .slide-section:last-child {
-                margin-right: 0;
-            }
-            /* Add padding to container so first/last items aren't flush to edge if desired */
-            .slide-container {
-                padding: 0 10px;
-            }
+            .slide-section { width: 90vw; margin-right: 10px; }
+            .slide-section:last-child { margin-right: 0; }
+            .slide-container { padding: 0 10px; }
         }
-
-        /* Tablet (>= 768px): 50% width to show both side-by-side */
         @media (min-width: 768px) and (max-width: 1023px) {
-            .slide-section {
-                width: 50vw;
-                border-right: 1px solid #e2e8f0;
-            }
+            .slide-section { width: 50vw; border-right: 1px solid #e2e8f0; }
         }
-
-        /* Desktop (>= 1024px): Traditional 3 columns layout logic override */
         @media (min-width: 1024px) {
             .slide-container {
                 display: grid;
-                grid-template-columns: 50% 50%; /* Main view is just Cat + Inv */
+                grid-template-columns: 50% 50%;
                 overflow-x: hidden;
                 scroll-snap-type: none;
                 padding: 0;
             }
-            .slide-section {
-                width: auto;
-                border-right: 1px solid #e2e8f0;
-            }
+            .slide-section { width: auto; border-right: 1px solid #e2e8f0; }
         }
         
         /* Loading overlay */
         #loading-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(255,255,255,0.9);
-            z-index: 50;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            position: fixed; inset: 0; background: rgba(255,255,255,0.9);
+            z-index: 50; display: flex; justify-content: center; align-items: center;
         }
+
+        /* Admin Elements - Hidden by default */
+        .admin-only { display: none !important; }
+        .admin-mode .admin-only { display: flex !important; }
+        .admin-mode .admin-block { display: block !important; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
@@ -117,7 +81,30 @@
     <div id="loading-overlay">
         <div class="text-center">
             <h2 class="text-2xl font-bold text-blue-600 mb-2">H2 LOGISTIQUE</h2>
-            <p class="text-slate-500">Chargement...</p>
+            <p class="text-slate-500">Connexion Cloud...</p>
+        </div>
+    </div>
+
+    <!-- APP ACCESS MODAL (New) -->
+    <div id="app-lock-modal" class="fixed inset-0 bg-slate-900 z-[60] flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center">
+            <div class="mb-4 flex justify-center">
+                <div class="bg-blue-100 p-3 rounded-full">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-1">H2 LOGISTIQUE</h3>
+            <p class="text-sm text-slate-500 mb-6">Calculateur de Cubage</p>
+            
+            <input type="tel" id="app-access-input" class="w-full p-3 border border-slate-300 rounded-lg mb-4 text-center tracking-[0.5em] text-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition" placeholder="••••" maxlength="4">
+            
+            <button onclick="verifyAppAccess()" class="w-full py-3 text-white font-bold bg-blue-600 rounded-lg hover:bg-blue-700 active:scale-95 transition shadow-lg shadow-blue-200">
+                Accéder
+            </button>
+            <p id="app-access-error" class="text-red-500 text-xs mt-4 font-medium hidden flex items-center justify-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Code incorrect
+            </p>
         </div>
     </div>
 
@@ -131,6 +118,11 @@
         </div>
         
         <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Admin Lock Button -->
+            <button onclick="toggleAdminMode()" id="admin-lock-btn" class="p-2 text-slate-400 hover:text-blue-600 rounded-full transition" title="Administration">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </button>
+
             <!-- Notes Button -->
             <button onclick="toggleNotes()" class="bg-amber-50 text-amber-600 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition shadow-sm">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
@@ -150,7 +142,6 @@
     </header>
 
     <!-- MAIN CONTENT CONTAINER -->
-    <!-- Contains only Catalog and Inventory side-by-side -->
     <main id="main-container" class="slide-container bg-slate-50">
         
         <!-- MODULE 1: CATALOGUE -->
@@ -161,6 +152,8 @@
                         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                         Catalogue
                     </h2>
+                    <!-- Indicateur mode Admin -->
+                    <span id="admin-indicator" class="hidden text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200 uppercase">Mode Admin</span>
                 </div>
                 
                 <!-- Room Selector -->
@@ -186,16 +179,15 @@
                 <div class="relative">
                     <input type="text" id="search-input" placeholder="Rechercher un objet..." class="w-full pl-9 pr-8 py-3 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
                     <svg class="absolute left-3 top-3.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    <!-- Clear Button -->
                     <button id="clear-search-btn" onclick="clearSearch()" class="absolute right-2 top-3.5 text-slate-400 hover:text-slate-600 hidden bg-white rounded-full p-0.5">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                 </div>
 
-                <!-- Add/Edit Form (Protected) -->
-                <details class="mt-3 group">
+                <!-- Add/Edit Form (HIDDEN BY DEFAULT - VISIBLE IN ADMIN MODE) -->
+                <details id="admin-form" class="mt-3 group admin-only hidden">
                     <summary class="list-none cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 select-none">
-                        <span class="bg-blue-100 p-1 rounded group-open:bg-blue-200 transition">+ Créer / Modifier objet</span>
+                        <span class="bg-blue-100 p-1 rounded group-open:bg-blue-200 transition">+ Créer / Modifier objet (Cloud)</span>
                     </summary>
                     <div class="mt-2 p-3 bg-slate-100 rounded-lg border border-slate-200">
                         <input type="hidden" id="edit-item-id">
@@ -209,7 +201,7 @@
                                 <input type="number" step="0.01" id="edit-item-vol" class="w-full p-1 border rounded text-sm">
                             </div>
                         </div>
-                        <button onclick="secureAction('saveItem')" class="w-full bg-blue-600 text-white py-1.5 rounded text-sm font-medium hover:bg-blue-700 shadow-sm">Enregistrer</button>
+                        <button onclick="saveCatalogItem()" class="w-full bg-blue-600 text-white py-1.5 rounded text-sm font-medium hover:bg-blue-700 shadow-sm">Enregistrer et Diffuser</button>
                     </div>
                 </details>
             </div>
@@ -245,12 +237,9 @@
         </section>
     </main>
 
-    <!-- NOTES MODAL (Hidden by default, triggered by button) -->
+    <!-- NOTES MODAL -->
     <div id="notes-modal" class="hidden fixed inset-0 z-40 flex justify-end">
-        <!-- Backdrop -->
         <div onclick="toggleNotes()" class="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"></div>
-        
-        <!-- Sidebar Content -->
         <div class="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col transform transition-transform duration-300">
             <div class="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
                 <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -261,23 +250,17 @@
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            
             <div class="p-2 border-b border-slate-100 flex justify-end gap-2 bg-white">
-                <button onclick="copyNotes()" class="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-3 py-1.5 rounded bg-blue-50 flex items-center gap-1">
-                    Copier
-                </button>
-                <button onclick="askResetNotes()" class="text-xs text-red-500 hover:text-red-700 font-medium border border-red-200 px-3 py-1.5 rounded bg-red-50 flex items-center gap-1">
-                    Vider
-                </button>
+                <button onclick="copyNotes()" class="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-3 py-1.5 rounded bg-blue-50 flex items-center gap-1">Copier</button>
+                <button onclick="askResetNotes()" class="text-xs text-red-500 hover:text-red-700 font-medium border border-red-200 px-3 py-1.5 rounded bg-red-50 flex items-center gap-1">Vider</button>
             </div>
-
             <div class="flex-1 p-4 bg-yellow-50">
                 <textarea id="notepad-area" class="w-full h-full bg-transparent resize-none outline-none text-sm text-slate-700 font-mono leading-relaxed" placeholder="Prendre des notes ici..."></textarea>
             </div>
         </div>
     </div>
 
-    <!-- CONFIRMATION MODAL -->
+    <!-- MODALS -->
     <div id="confirm-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
             <h3 class="text-lg font-bold text-slate-800 mb-2">Confirmation</h3>
@@ -289,11 +272,10 @@
         </div>
     </div>
 
-    <!-- SECURITY MODAL -->
     <div id="security-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
-            <h3 class="text-lg font-bold text-slate-800 mb-2">Accès Sécurisé Requis</h3>
-            <p class="text-sm text-slate-500 mb-4">Cette action nécessite un code d'authentification.</p>
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Accès Administrateur</h3>
+            <p class="text-sm text-slate-500 mb-4">Entrez le code pour modifier le catalogue global.</p>
             <input type="text" id="security-code-input" class="w-full p-3 border border-slate-300 rounded-lg mb-4 text-center tracking-widest text-lg" placeholder="Code d'accès">
             <div class="flex gap-2">
                 <button onclick="closeModal('security-modal')" class="flex-1 py-2 text-slate-600 font-medium bg-slate-100 rounded-lg hover:bg-slate-200">Annuler</button>
@@ -303,7 +285,6 @@
         </div>
     </div>
 
-    <!-- TOAST NOTIFICATION -->
     <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
         <span id="toast-msg">Action effectuée</span>
     </div>
@@ -311,7 +292,6 @@
     <script>
         // --- 1. CONFIGURATION & STATE ---
 
-         // Données Initiales du Catalogue (~100 objets)
         const INITIAL_CATALOG = [
             { id: 1, name: "Armoire (1 porte)", vol: 1, cat: "General" },
             { id: 2, name: "Armoire (2 portes coulissante)", vol: 2, cat: "General" },
@@ -348,7 +328,7 @@
             { id: 33, name: "Chaise", vol: 0.2, cat: "General" },
             { id: 34, name: "Chaise de bureau", vol: 0.3, cat: "General" },
             { id: 35, name: "Chaise pliante", vol: 0.1, cat: "General" },
-            { id: 36, name: "Colonne", vol: 0.5, cat: "General" },
+            { id: 36, name: "Chiffonnier / Semainier", vol: 0.5, cat: "General" },
             { id: 37, name: "Climatiseur", vol: 0.3, cat: "General" },
             { id: 38, name: "Coffre (grand)", vol: 1, cat: "General" },
             { id: 39, name: "Coffre (moyen)", vol: 0.5, cat: "General" },
@@ -463,14 +443,6 @@
             { id: 148, name: "Caisse plastique (petit)", vol: 0.2, cat: "General" },
             { id: 149, name: "Meuble Kallax (16 cases)", vol: 0.2, cat: "General" },
             { id: 150, name: "Plante (petit-)", vol: 0.2, cat: "General" },
-            { id: 151, name: "Arbre à chat", vol: 0.50, cat: "General" },
-            { id: 152, name: "Salon de jardin", vol: 1.00, cat: "General" },
-            { id: 153, name: "Matelas seul (1p)", vol: 0.40, cat: "General" },
-            { id: 154, name: "Matelas seul (2p)", vol: 0.80, cat: "General" },
-            { id: 155, name: "Méridienne", vol: 1.00, cat: "General" },
-            { id: 156, name: "Table basse (petit)", vol: 0.25, cat: "General" },
-            { id: 157, name: "Table basse (grand)", vol: 0.75, cat: "General" },
-
         ];
 
         const DEFAULT_NOTES = ` 
@@ -503,17 +475,16 @@ Inventaire :
 
         // State Global
         let state = {
-            catalog: JSON.parse(localStorage.getItem('h2_catalog')) || INITIAL_CATALOG,
-            inventory: JSON.parse(localStorage.getItem('h2_inventory')) || [], // Structure: [{itemId, name, vol, qty, room}]
+            catalog: JSON.parse(localStorage.getItem('h2_catalog')) || [], // Start empty to prioritize cloud
+            inventory: JSON.parse(localStorage.getItem('h2_inventory')) || [],
             notes: localStorage.getItem('h2_notes') || DEFAULT_NOTES,
-            currentRoom: 'Generale'
+            currentRoom: 'Generale',
+            isAdmin: false
         };
 
         // Firebase Vars
         let db, auth;
-        let pendingSecureAction = null; // Store function to run after code verify
-        
-        // Modal Vars
+        let pendingSecureAction = null;
         let currentConfirmCallback = null;
 
         // --- 2. INITIALISATION ---
@@ -537,6 +508,10 @@ Inventaire :
                 } catch (e) {
                     console.error("Auth Error", e);
                 }
+            } else {
+                // Local only fallback
+                if(state.catalog.length === 0) state.catalog = INITIAL_CATALOG;
+                renderCatalog();
             }
 
             document.getElementById('loading-overlay').style.display = 'none';
@@ -563,27 +538,22 @@ Inventaire :
             listEl.innerHTML = '';
 
             filtered.forEach(item => {
-                // Find current quantity for this item in this room
                 const invItem = state.inventory.find(i => i.itemId === item.id && i.room === room);
                 const currentQty = invItem ? invItem.qty : 0;
 
                 const div = document.createElement('div');
                 div.className = "flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-300 transition-colors";
-                
-                // Logic for style based on qty
-                const activeStyle = currentQty > 0 ? "border-l-4 border-l-blue-500" : "";
                 if(currentQty > 0) div.classList.add('bg-blue-50/30');
 
                 div.innerHTML = `
                     <div class="flex-1 pr-2">
                         <div class="font-semibold text-sm text-slate-800">${item.name}</div>
                         <div class="text-xs text-slate-500 font-mono">${item.vol.toFixed(2)} m³</div>
-                        <div class="flex gap-2 mt-1">
-                             <button onclick="secureAction('edit', ${item.id})" class="text-[10px] text-blue-400 hover:text-blue-600 underline">Modifier</button>
-                             <button onclick="secureAction('deleteCatalogItem', ${item.id})" class="text-[10px] text-slate-300 hover:text-red-500 underline flex items-center gap-1">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                Suppr.
-                             </button>
+                        
+                        <!-- Admin Only Buttons -->
+                        <div class="flex gap-2 mt-1 admin-only">
+                             <button onclick="loadItemForEdit(${item.id})" class="text-[10px] text-blue-400 hover:text-blue-600 underline">Modifier</button>
+                             <button onclick="deleteCatalogItem(${item.id})" class="text-[10px] text-slate-300 hover:text-red-500 underline flex items-center gap-1">Suppr.</button>
                         </div>
                     </div>
                     
@@ -618,14 +588,12 @@ Inventaire :
             
             listEl.innerHTML = '';
 
-            // Group by Room
             const grouped = state.inventory.reduce((acc, item) => {
                 acc[item.room] = acc[item.room] || [];
                 acc[item.room].push(item);
                 return acc;
             }, {});
 
-            // Render groups
             Object.keys(grouped).forEach(room => {
                 const roomItems = grouped[room];
                 const roomTotal = roomItems.reduce((sum, item) => sum + (item.vol * item.qty), 0);
@@ -633,7 +601,6 @@ Inventaire :
                 const section = document.createElement('div');
                 section.className = "mb-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm";
                 
-                // Room Header
                 section.innerHTML = `
                     <div class="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
                         <span class="font-bold text-sm text-slate-700 uppercase tracking-wide">${room}</span>
@@ -666,7 +633,6 @@ Inventaire :
         function updateTotalHeader() {
             const total = state.inventory.reduce((sum, item) => sum + (item.vol * item.qty), 0);
             document.getElementById('header-total-volume').textContent = total.toFixed(2);
-            // Mobile volume now in same element
         }
 
         // --- 4. LOGIC & ACTIONS ---
@@ -691,7 +657,6 @@ Inventaire :
             }
             
             saveData();
-            // Refresh both to update totals and qty indicators
             renderCatalog();
             renderInventory();
             updateTotalHeader();
@@ -700,7 +665,6 @@ Inventaire :
         function updateQty(room, itemId, delta) {
             const idx = state.inventory.findIndex(i => i.itemId === itemId && i.room === room);
             if (idx === -1) {
-                // If trying to add from 0 via catalog minus button (should be impossible)
                 if (delta > 0) addToInventory(itemId); 
                 return;
             }
@@ -717,7 +681,28 @@ Inventaire :
             updateTotalHeader();
         }
 
-        // --- 5. CATALOG MANAGEMENT (SECURED & CLOUD SYNCED) ---
+        // --- 5. CATALOG MANAGEMENT (SECURED & CLOUD) ---
+
+        function toggleAdminMode() {
+            if (state.isAdmin) {
+                // Toggle Off
+                state.isAdmin = false;
+                document.body.classList.remove('admin-mode');
+                document.getElementById('admin-indicator').classList.add('hidden');
+                document.getElementById('admin-form').classList.remove('admin-block'); // Force hide
+                showToast("Mode Admin désactivé");
+            } else {
+                // Ask Code
+                secureAction('enableAdmin');
+            }
+        }
+
+        function enableAdminMode() {
+            state.isAdmin = true;
+            document.body.classList.add('admin-mode');
+            document.getElementById('admin-indicator').classList.remove('hidden');
+            showToast("Mode Admin activé");
+        }
 
         function saveCatalogItem() {
             const idInput = document.getElementById('edit-item-id').value;
@@ -746,24 +731,22 @@ Inventaire :
             document.getElementById('edit-item-vol').value = '';
             document.querySelector('details').removeAttribute('open');
 
-            // UPDATE LOCAL & CLOUD
             saveData();
-            updateCloudCatalog(); // <-- Cloud Sync Magic
+            updateCloudCatalog();
             renderCatalog();
-            showToast("Catalogue mis à jour et diffusé !");
+            showToast("Catalogue mis à jour pour tous !");
         }
 
         function deleteCatalogItem(id) {
-            openConfirm("Supprimer définitivement cet objet du catalogue pour TOUS les utilisateurs ?", () => {
-                const idx = state.catalog.findIndex(i => i.id === id);
-                if(idx !== -1) {
-                    state.catalog.splice(idx, 1);
-                    saveData();
-                    updateCloudCatalog(); // <-- Cloud Sync Magic
-                    renderCatalog();
-                    showToast("Objet supprimé du catalogue Cloud");
-                }
-            });
+            if(!confirm("Supprimer cet objet du catalogue global ?")) return;
+            const idx = state.catalog.findIndex(i => i.id === id);
+            if(idx !== -1) {
+                state.catalog.splice(idx, 1);
+                saveData();
+                updateCloudCatalog();
+                renderCatalog();
+                showToast("Objet supprimé");
+            }
         }
 
         async function updateCloudCatalog() {
@@ -772,7 +755,6 @@ Inventaire :
             const dataRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
             
             try {
-                // Only update catalog field, preserving other users' inventory/notes if they were in the same doc
                 await dataRef.set({
                     catalog: state.catalog,
                     lastCatalogUpdate: firebase.firestore.FieldValue.serverTimestamp()
@@ -801,8 +783,30 @@ Inventaire :
             searchInput.focus();
         }
 
-        // --- 6. SECURITY & CONFIRM SYSTEM ---
+        // --- 6. SECURITY & UTILS ---
         
+        function verifyAppAccess() {
+            const input = document.getElementById('app-access-input');
+            const errorMsg = document.getElementById('app-access-error');
+            const modal = document.getElementById('app-lock-modal');
+            
+            if (input.value === "1010") {
+                // Success animation
+                input.classList.add('border-green-500', 'text-green-600');
+                setTimeout(() => {
+                    modal.classList.add('opacity-0', 'pointer-events-none');
+                    setTimeout(() => modal.style.display = 'none', 300);
+                }, 200);
+            } else {
+                // Error animation
+                errorMsg.classList.remove('hidden');
+                input.value = '';
+                input.classList.add('border-red-500', 'animate-pulse');
+                setTimeout(() => input.classList.remove('border-red-500', 'animate-pulse'), 500);
+                input.focus();
+            }
+        }
+
         function openConfirm(msg, callback) {
             document.getElementById('confirm-msg').textContent = msg;
             currentConfirmCallback = callback;
@@ -828,7 +832,7 @@ Inventaire :
         }
         
         function askResetNotes() {
-             openConfirm("Voulez-vous vraiment vider toutes les notes et revenir au modèle par défaut ?", () => {
+             openConfirm("Voulez-vous vraiment vider toutes les notes ?", () => {
                 state.notes = DEFAULT_NOTES;
                 document.getElementById('notepad-area').value = DEFAULT_NOTES;
                 saveData();
@@ -857,21 +861,14 @@ Inventaire :
 
         function executeSecureAction() {
             if (!pendingSecureAction) return;
-            
             const { type, param } = pendingSecureAction;
             
             switch(type) {
-                case 'saveItem':
-                    saveCatalogItem();
-                    break;
-                case 'edit':
-                    loadItemForEdit(param);
-                    break;
-                case 'deleteCatalogItem':
-                    deleteCatalogItem(param);
+                case 'enableAdmin':
+                    enableAdminMode();
                     break;
                 case 'sync':
-                    performFirebaseSync();
+                    // Just legacy trigger if needed, or remove
                     break;
             }
             pendingSecureAction = null;
@@ -882,17 +879,13 @@ Inventaire :
             document.getElementById(id).classList.remove('flex');
         }
         
-        // --- NOTES MODAL TOGGLE ---
         function toggleNotes() {
             const modal = document.getElementById('notes-modal');
-            if (modal.classList.contains('hidden')) {
-                modal.classList.remove('hidden');
-            } else {
-                modal.classList.add('hidden');
-            }
+            if (modal.classList.contains('hidden')) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
         }
 
-        // --- 7. SYNC & PERSISTENCE ---
+        // --- 7. DATA SYNC ---
 
         function saveData() {
             localStorage.setItem('h2_catalog', JSON.stringify(state.catalog));
@@ -900,75 +893,53 @@ Inventaire :
             localStorage.setItem('h2_notes', state.notes);
         }
 
-        async function performFirebaseSync() {
-            if (!auth.currentUser || !db) {
-                showToast("Erreur: Non connecté au Cloud");
-                return;
-            }
-
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'h2-logistique';
-            const dataRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
-
-            try {
-                // Full Sync (Manual) - Be careful not to overwrite catalog if someone else updated it
-                // Ideally this button handles Inventory/Notes sync primarily
-                await dataRef.set({
-                    // catalog: state.catalog, // Don't overwrite catalog blindly here unless intended
-                    inventory: state.inventory,
-                    notes: state.notes,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                showToast("Données synchronisées !");
-            } catch (err) {
-                console.error("Sync failed", err);
-                showToast("Erreur de synchronisation");
-            }
-        }
-
         function setupRealtimeListener(appId) {
              if (!auth.currentUser) return;
-             
              const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
              
              docRef.onSnapshot((doc) => {
                  if (doc.exists) {
                      const remoteData = doc.data();
                      
-                     // CLOUD CATALOG PRIORITY
+                     // PRIORITY: Cloud Catalog overwrites Local Catalog
                      if (remoteData.catalog && Array.isArray(remoteData.catalog) && remoteData.catalog.length > 0) {
-                         // Only update if different stringified to avoid loop/redraw
+                         // Simple comparison to avoid loops
                          if (JSON.stringify(state.catalog) !== JSON.stringify(remoteData.catalog)) {
-                             console.log("Mise à jour du catalogue reçue depuis le Cloud");
                              state.catalog = remoteData.catalog;
-                             renderCatalog(); 
+                             renderCatalog();
                              saveData();
+                             console.log("Catalogue mis à jour depuis le Cloud");
                          }
                      } else {
-                         // If Cloud is empty (first run), Seed it with INITIAL_CATALOG
-                         if(state.catalog.length > 0) {
-                             console.log("Amorçage du catalogue Cloud...");
+                         // Seed Cloud if empty
+                         if(state.catalog.length === 0) {
+                             state.catalog = INITIAL_CATALOG;
+                             updateCloudCatalog();
+                         } else if (state.catalog.length > 0 && (!remoteData.catalog || remoteData.catalog.length === 0)) {
                              updateCloudCatalog();
                          }
                      }
-
-                     // Optional: Sync Inventory if you want shared sessions (multiplayer mode)
-                     // If you want each user to have their own inventory, remove this block
-                     /* if (remoteData.inventory) {
-                         state.inventory = remoteData.inventory;
-                         renderInventory();
-                         updateTotalHeader();
-                     } 
-                     */
+                 } else {
+                     // Doc doesn't exist, seed it
+                     state.catalog = INITIAL_CATALOG;
+                     updateCloudCatalog();
                  }
              }, (error) => {
                  console.error("Listener error:", error);
+                 // Fallback to local
+                 if(state.catalog.length === 0) state.catalog = INITIAL_CATALOG;
+                 renderCatalog();
              });
         }
 
-        // --- 8. UTILITIES ---
+        // --- 8. EVENTS ---
 
         function setupEventListeners() {
-            // Search Debounce with clear button toggle
+            // App Access Enter Key
+            document.getElementById('app-access-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') verifyAppAccess();
+            });
+
             document.getElementById('search-input').addEventListener('input', (e) => {
                 const btn = document.getElementById('clear-search-btn');
                 if(e.target.value.length > 0) btn.classList.remove('hidden');
@@ -976,13 +947,11 @@ Inventaire :
                 renderCatalog();
             });
 
-            // Room Selector
             document.getElementById('room-selector').addEventListener('change', (e) => {
                 state.currentRoom = e.target.value;
-                renderCatalog(); // Update list to show correct qty for new room
+                renderCatalog();
             });
 
-            // Notepad Auto-save
             const notepad = document.getElementById('notepad-area');
             let noteTimeout;
             notepad.addEventListener('input', (e) => {
@@ -1002,24 +971,20 @@ Inventaire :
             setTimeout(() => t.classList.add('opacity-0'), 2500);
         }
 
-        // --- COPY FUNCTIONS ---
+        // --- COPY ---
 
         function copyInventoryToClipboard() {
             if (state.inventory.length === 0) {
                 showToast("Inventaire vide");
                 return;
             }
-
             let text = "";
-            
             const grouped = state.inventory.reduce((acc, item) => {
                 acc[item.room] = acc[item.room] || [];
                 acc[item.room].push(item);
                 return acc;
             }, {});
-
             const sortedRooms = Object.keys(grouped).sort();
-
             sortedRooms.forEach(room => {
                 text += `${room.toUpperCase()}\n`; 
                 grouped[room].forEach(item => {
@@ -1027,9 +992,29 @@ Inventaire :
                 });
                 text += "\n"; 
             });
-
             const total = state.inventory.reduce((sum, item) => sum + (item.vol * item.qty), 0);
             text += `TOTAL:\t${total.toFixed(2)} m³`;
+
+            // --- DÉTAIL CARTONS ---
+            const cartonTypes = ["Carton livre", "Carton penderie", "Carton standard", "Carton vaisselle"];
+            const cartonCounts = {};
+            let hasCartons = false;
+
+            state.inventory.forEach(item => {
+                if (cartonTypes.includes(item.name)) {
+                    cartonCounts[item.name] = (cartonCounts[item.name] || 0) + item.qty;
+                    hasCartons = true;
+                }
+            });
+
+            if (hasCartons) {
+                text += "\n\n--- DÉTAIL CARTONS ---\n";
+                // On affiche uniquement les types présents
+                Object.keys(cartonCounts).sort().forEach(name => {
+                    text += `${name}\t${cartonCounts[name]}\n`;
+                });
+            }
+            // ---------------------
 
             fallbackCopyText(text, "Inventaire copié");
         }
@@ -1048,7 +1033,6 @@ Inventaire :
             document.body.appendChild(textArea);
             textArea.focus();
             textArea.select();
-            
             try {
                 const successful = document.execCommand('copy');
                 if(successful) showToast(successMsg);
@@ -1059,7 +1043,6 @@ Inventaire :
             document.body.removeChild(textArea);
         }
 
-        // Start App
         window.addEventListener('load', initApp);
 
     </script>
