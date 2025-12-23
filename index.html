@@ -2,707 +2,1049 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculateur Devis Déménagement - H2 Logistique</title>
-    
-    <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel pour traduire le JSX en direct -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Calculateur de Cubage - H2 LOGISTIQUE</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
 
-    <!-- Style pour l'impression -->
     <style>
-        @media print {
-            body { -webkit-print-color-adjust: exact; }
-            .no-print { display: none; }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Prevent Pull-to-refresh on mobile */
+        body { overscroll-behavior-y: none; touch-action: pan-x pan-y; }
+
+        /* Utilities */
+        .touch-target { min-height: 44px; min-width: 44px; }
+        
+        /* Layout Mobile/Tablet Slide Logic */
+        .slide-container {
+            display: flex;
+            flex-direction: row;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-behavior: smooth;
+            height: calc(100dvh - 64px);
+            scroll-snap-type: x mandatory;
         }
+        .slide-section {
+            height: 100%;
+            overflow-y: auto;
+            flex-shrink: 0;
+            scroll-snap-align: start;
+        }
+
+        /* Responsive Widths */
+        @media (max-width: 767px) {
+            .slide-section { width: 90vw; margin-right: 10px; }
+            .slide-section:last-child { margin-right: 0; }
+            .slide-container { padding: 0 10px; }
+        }
+        @media (min-width: 768px) and (max-width: 1023px) {
+            .slide-section { width: 50vw; border-right: 1px solid #e2e8f0; }
+        }
+        @media (min-width: 1024px) {
+            .slide-container {
+                display: grid;
+                grid-template-columns: 50% 50%;
+                overflow-x: hidden;
+                scroll-snap-type: none;
+                padding: 0;
+            }
+            .slide-section { width: auto; border-right: 1px solid #e2e8f0; }
+        }
+        
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed; inset: 0; background: rgba(255,255,255,0.9);
+            z-index: 50; display: flex; justify-content: center; align-items: center;
+        }
+
+        /* Admin Elements - Hidden by default */
+        .admin-only { display: none !important; }
+        .admin-mode .admin-only { display: flex !important; }
+        .admin-mode .admin-block { display: block !important; }
     </style>
 </head>
-<body class="bg-slate-100 font-sans text-slate-800">
-    <div id="root"></div>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+    <!-- Loading Screen -->
+    <div id="loading-overlay">
+        <div class="text-center">
+            <h2 class="text-2xl font-bold text-blue-600 mb-2">H2 LOGISTIQUE</h2>
+            <p class="text-slate-500">Connexion Cloud...</p>
+        </div>
+    </div>
 
-        // --- COMPOSANTS ICONES ---
-        const Lock = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
-        const Unlock = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>;
-        const Calculator = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01"></path><path d="M12 10h.01"></path><path d="M8 10h.01"></path><path d="M12 14h.01"></path><path d="M8 14h.01"></path><path d="M12 18h.01"></path><path d="M8 18h.01"></path></svg>;
-        const Save = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
-        const Info = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
-        const ArrowLeft = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>;
-        const Edit3 = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>;
-        const TableIcon = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4h6V3z"></path><path d="M9 21H5a2 2 0 0 1-2-2v-4h6v6z"></path><path d="M21 3h-4v6h6V5a2 2 0 0 0-2-2z"></path><path d="M21 21h-4v-6h6v4a2 2 0 0 1-2 2z"></path><rect x="9" y="3" width="6" height="18"></rect></svg>;
-        const ChevronDown = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
-        const ChevronUp = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>;
-        const Trash2 = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
-        const RotateCcw = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>;
-        const KeyRound = ({size, className}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"></path><circle cx="16.5" cy="7.5" r=".5"></circle></svg>;
+    <!-- APP ACCESS MODAL (New) -->
+    <div id="app-lock-modal" class="fixed inset-0 bg-slate-900 z-[60] flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center">
+            <div class="mb-4 flex justify-center">
+                <div class="bg-blue-100 p-3 rounded-full">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-1">H2 LOGISTIQUE</h3>
+            <p class="text-sm text-slate-500 mb-6">Calculateur de Cubage</p>
+            
+            <input type="tel" id="app-access-input" class="w-full p-3 border border-slate-300 rounded-lg mb-4 text-center tracking-[0.5em] text-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition" placeholder="••••" maxlength="4">
+            
+            <button onclick="verifyAppAccess()" class="w-full py-3 text-white font-bold bg-blue-600 rounded-lg hover:bg-blue-700 active:scale-95 transition shadow-lg shadow-blue-200">
+                Accéder
+            </button>
+            <p id="app-access-error" class="text-red-500 text-xs mt-4 font-medium hidden flex items-center justify-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Code incorrect
+            </p>
+        </div>
+    </div>
 
-        // --- DONNÉES INITIALES ---
+    <!-- HEADER -->
+    <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 shadow-sm z-20 flex-shrink-0 relative">
+        <div class="flex items-center gap-4">
+            <div class="flex flex-col">
+                <h1 class="text-xl font-bold text-blue-900 leading-tight">H2 LOGISTIQUE</h1>
+                <span class="text-xs text-slate-500 font-medium tracking-wide">CALCULATEUR</span>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Admin Lock Button -->
+            <button onclick="toggleAdminMode()" id="admin-lock-btn" class="p-2 text-slate-400 hover:text-blue-600 rounded-full transition" title="Administration">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </button>
 
-        const INITIAL_DATA = {
-          prestation: [
-            { id: 'p1', name: 'Cubage', defaultPrice: 35 },
-            { id: 'p2', name: 'Etages sans ascenseur', defaultPrice: 0.80 }, 
-            { 
-              id: 'p3', 
-              name: 'Démontage / Remontage', 
-              defaultPrice: 40, 
-              info: "Si mobilier complexe ou long à démonter / remonter alors indiquer '2' pour ce mobilier"
-            },
-            { id: 'p4', name: 'Portage (en m)', defaultPrice: 0.50 }, 
-            { 
-              id: 'p8', 
-              name: 'Distance parcourue (en km)', 
-              defaultPrice: 0.65, 
-              unit: 'km', 
-              info: "Remplir si (Approche Paris + Trajet) > 50km. Calcul : Distance x 0,65€ x Nbr Camions" 
-            },
-          ],
-          ra_monte_meuble: [
-             { 
-              id: 'p5', 
-              name: 'Monte-meuble 1/2 journée', 
-              defaultPrice: 220, 
-              info: "Majoration si l'inventaire contient un piano ou si l'étage est au 9ieme ou +"
-            },
-            { 
-              id: 'p6', 
-              name: 'Monte-meuble 1 journée', 
-              defaultPrice: 320, 
-              info: "Majoration si l'inventaire contient un piano ou si l'étage est au 9ieme ou +"
-            },
-            { id: 'p7', name: 'AOT (Autorisation Stationnement)', defaultPrice: 25 },
-            { id: 'ra1', name: 'Supplément > 8ème étage', defaultPrice: 40, info: "Supplément pour étages 9 et 10" },
-            { id: 'ra2', name: 'Monte-meuble > 10ème (1/2 journée)', defaultPrice: 400, info: "Tarif spécial haute hauteur" },
-            { id: 'ra3', name: 'Monte-meuble > 10ème (Journée)', defaultPrice: 700, info: "Tarif spécial haute hauteur" },
-          ],
-          materiel: [
-            { id: 'm1', name: 'Cartons Standard', defaultPrice: 1 },
-            { id: 'm2', name: 'Cartons Livre', defaultPrice: 1.00 },
-            { id: 'm3', name: 'Cartons Penderie', defaultPrice: 10.00 },
-            { 
-              id: 'm4', 
-              name: 'Papier bulle', 
-              defaultPrice: 7, 
-              info: "10 cartons vaisselle = 1 papier bulle"
-            },
-            { 
-              id: 'm5', 
-              name: 'Scotch', 
-              defaultPrice: 2, 
-              info: "20 cartons = 1 scotch"
-            },
-            { id: 'm6', name: 'Livraison', defaultPrice: 30.00, readOnlyQuantity: true },
-          ],
-          confort: [
-            { id: 'c1', name: 'Pack Confort (Emballage Fragile)', defaultPrice: 150, info: "Emballage vaisselle, verrerie et bibelots" },
-          ],
-          distance: [
-            { id: 'l1', name: 'Nombre de camions', defaultPrice: 1200, readOnlyQuantity: true },
-            { id: 'l2', name: 'Distance kilométrique', defaultPrice: 2.20, unit: 'km', info: "Si > 550km : 2.2€/km (Remplace le prix camion). Sinon forfait 1200€ s'applique." }, 
-            { id: 'l3', name: 'Chargement le matin', defaultPrice: 400, info: "400€ (1-2 camions) / 800€ (3+ camions)" },
-            { id: 'l4', name: 'Option Groupage', defaultPrice: 0, info: "Active le tarif groupage (Plafonné au prix longue distance)" },
-          ],
-          groupage: [
-            { id: 'g1', name: 'Forfait Groupage', defaultPrice: 0, readOnlyQuantity: true, info: "Calculé sur la base du cubage ou de la distance" },
-          ]
+            <!-- Notes Button -->
+            <button onclick="toggleNotes()" class="bg-amber-50 text-amber-600 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition shadow-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                <span class="text-xs font-bold hidden sm:inline">NOTES</span>
+            </button>
+
+            <!-- Volume Display -->
+            <div class="bg-blue-50 px-2 sm:px-3 py-1 rounded-lg border border-blue-100 text-center min-w-[70px]">
+                <span class="text-[10px] text-blue-600 uppercase font-bold block sm:hidden">Vol.</span>
+                <span class="text-xs text-blue-600 uppercase font-bold hidden sm:block">Volume Total</span>
+                <div class="leading-none">
+                    <span id="header-total-volume" class="text-base sm:text-lg font-bold text-blue-800">0.00</span>
+                    <span class="text-[10px] sm:text-xs text-blue-600">m³</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main id="main-container" class="slide-container bg-slate-50">
+        
+        <!-- MODULE 1: CATALOGUE -->
+        <section id="view-catalog" class="slide-section flex flex-col bg-white border-r border-slate-200">
+            <div class="p-4 bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        Catalogue
+                    </h2>
+                    <!-- Indicateur mode Admin -->
+                    <span id="admin-indicator" class="hidden text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200 uppercase">Mode Admin</span>
+                </div>
+                
+                <!-- Room Selector -->
+                <div class="mb-3">
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pièce Active</label>
+                    <select id="room-selector" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                        <option value="Generale">Générale</option>
+                        <option value="Salon">Salon / Séjour</option>
+                        <option value="Cuisine">Cuisine</option>
+                        <option value="Chambre 1">Chambre 1</option>
+                        <option value="Chambre 2">Chambre 2</option>
+                        <option value="Chambre 3">Chambre 3</option>
+                        <option value="Chambre 4">Chambre 4</option>
+                        <option value="SDB">Salle de bain / WC</option>
+                        <option value="Entree">Entrée / Couloir</option>
+                        <option value="Garage">Garage / Cave</option>
+                        <option value="Exterieur">Extérieur</option>
+                        <option value="Divers">Divers</option>
+                    </select>
+                </div>
+
+                <!-- Search -->
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Rechercher un objet..." class="w-full pl-9 pr-8 py-3 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                    <svg class="absolute left-3 top-3.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <button id="clear-search-btn" onclick="clearSearch()" class="absolute right-2 top-3.5 text-slate-400 hover:text-slate-600 hidden bg-white rounded-full p-0.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Add/Edit Form (HIDDEN BY DEFAULT - VISIBLE IN ADMIN MODE) -->
+                <details id="admin-form" class="mt-3 group admin-only hidden">
+                    <summary class="list-none cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 select-none">
+                        <span class="bg-blue-100 p-1 rounded group-open:bg-blue-200 transition">+ Créer / Modifier objet (Cloud)</span>
+                    </summary>
+                    <div class="mt-2 p-3 bg-slate-100 rounded-lg border border-slate-200">
+                        <input type="hidden" id="edit-item-id">
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <div class="col-span-2">
+                                <label class="text-xs text-slate-500">Nom</label>
+                                <input type="text" id="edit-item-name" class="w-full p-1 border rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500">Vol (m³)</label>
+                                <input type="number" step="0.01" id="edit-item-vol" class="w-full p-1 border rounded text-sm">
+                            </div>
+                        </div>
+                        <button onclick="saveCatalogItem()" class="w-full bg-blue-600 text-white py-1.5 rounded text-sm font-medium hover:bg-blue-700 shadow-sm">Enregistrer et Diffuser</button>
+                    </div>
+                </details>
+            </div>
+
+            <!-- List -->
+            <div id="catalog-list" class="flex-1 overflow-y-auto p-2 space-y-2 pb-4">
+                <!-- Items injected by JS -->
+            </div>
+        </section>
+
+        <!-- MODULE 2: INVENTAIRE -->
+        <section id="view-inventory" class="slide-section flex flex-col bg-slate-100 lg:bg-slate-50">
+            <div class="p-4 bg-white border-b border-slate-100 sticky top-0 z-10 flex justify-between items-center shadow-sm">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    Inventaire
+                </h2>
+                <div class="flex gap-2">
+                    <button onclick="copyInventoryToClipboard()" class="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1 rounded bg-blue-50 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        Copier
+                    </button>
+                    <button onclick="askClearInventory()" class="text-xs text-red-500 hover:text-red-700 font-medium border border-red-200 px-2 py-1 rounded bg-red-50 flex items-center gap-1">
+                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        Vider
+                    </button>
+                </div>
+            </div>
+
+            <div id="inventory-list" class="flex-1 overflow-y-auto p-2 pb-4">
+                <!-- Inventory groups injected by JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- NOTES MODAL -->
+    <div id="notes-modal" class="hidden fixed inset-0 z-40 flex justify-end">
+        <div onclick="toggleNotes()" class="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"></div>
+        <div class="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col transform transition-transform duration-300">
+            <div class="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    Notes
+                </h2>
+                <button onclick="toggleNotes()" class="text-slate-400 hover:text-slate-600 bg-white rounded-full p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-2 border-b border-slate-100 flex justify-end gap-2 bg-white">
+                <button onclick="copyNotes()" class="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-3 py-1.5 rounded bg-blue-50 flex items-center gap-1">Copier</button>
+                <button onclick="askResetNotes()" class="text-xs text-red-500 hover:text-red-700 font-medium border border-red-200 px-3 py-1.5 rounded bg-red-50 flex items-center gap-1">Vider</button>
+            </div>
+            <div class="flex-1 p-4 bg-yellow-50">
+                <textarea id="notepad-area" class="w-full h-full bg-transparent resize-none outline-none text-sm text-slate-700 font-mono leading-relaxed" placeholder="Prendre des notes ici..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Confirmation</h3>
+            <p id="confirm-msg" class="text-sm text-slate-500 mb-4">...</p>
+            <div class="flex gap-2">
+                <button onclick="closeModal('confirm-modal')" class="flex-1 py-2 text-slate-600 font-medium bg-slate-100 rounded-lg hover:bg-slate-200">Non</button>
+                <button id="confirm-yes-btn" onclick="executeConfirm()" class="flex-1 py-2 text-white font-medium bg-red-600 rounded-lg hover:bg-red-700">Oui</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="security-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Accès Administrateur</h3>
+            <p class="text-sm text-slate-500 mb-4">Entrez le code pour modifier le catalogue global.</p>
+            <input type="text" id="security-code-input" class="w-full p-3 border border-slate-300 rounded-lg mb-4 text-center tracking-widest text-lg" placeholder="Code d'accès">
+            <div class="flex gap-2">
+                <button onclick="closeModal('security-modal')" class="flex-1 py-2 text-slate-600 font-medium bg-slate-100 rounded-lg hover:bg-slate-200">Annuler</button>
+                <button onclick="verifyCode()" class="flex-1 py-2 text-white font-medium bg-blue-600 rounded-lg hover:bg-blue-700">Valider</button>
+            </div>
+            <p id="security-error" class="text-center text-red-500 text-xs mt-2 hidden">Code incorrect</p>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
+        <span id="toast-msg">Action effectuée</span>
+    </div>
+
+    <script>
+        // --- 1. CONFIGURATION & STATE ---
+
+        const INITIAL_CATALOG = [
+            { id: 1, name: "Armoire (1 porte)", vol: 1, cat: "General" },
+            { id: 2, name: "Armoire (2 portes coulissante)", vol: 2, cat: "General" },
+            { id: 3, name: "Armoire (2 portes)", vol: 2, cat: "General" },
+            { id: 4, name: "Armoire (3 portes coulissante)", vol: 3, cat: "General" },
+            { id: 5, name: "Armoire (3 portes)", vol: 3, cat: "General" },
+            { id: 6, name: "Armoire (4 porte)", vol: 4, cat: "General" },
+            { id: 7, name: "Armoire (4 portes coulissante)", vol: 4, cat: "General" },
+            { id: 8, name: "Aspirateur", vol: 0.3, cat: "General" },
+            { id: 9, name: "Bahut", vol: 2.5, cat: "General" },
+            { id: 10, name: "Banc", vol: 0.3, cat: "General" },
+            { id: 11, name: "Barbecue (grand)", vol: 1, cat: "General" },
+            { id: 12, name: "Barbecue (moyen)", vol: 0.5, cat: "General" },
+            { id: 13, name: "Barbecue (petit)", vol: 0.25, cat: "General" },
+            { id: 14, name: "Bibliothèque (grand)", vol: 1.5, cat: "General" },
+            { id: 15, name: "Bibliothèque (moyen)", vol: 1, cat: "General" },
+            { id: 16, name: "Bibliothèque (petit)", vol: 0.5, cat: "General" },
+            { id: 17, name: "Biblo", vol: 0.1, cat: "General" },
+            { id: 18, name: "Buffet", vol: 1.5, cat: "General" },
+            { id: 19, name: "Bureau (grand)", vol: 1.5, cat: "General" },
+            { id: 20, name: "Bureau (moyen) / Secrétaire", vol: 1, cat: "General" },
+            { id: 21, name: "Bureau (petit)", vol: 0.5, cat: "General" },
+            { id: 22, name: "Caisse plastique (grand)", vol: 0.5, cat: "General" },
+            { id: 23, name: "Caisse plastique (moyen)", vol: 0.3, cat: "General" },
+            { id: 24, name: "Caisson", vol: 0.3, cat: "General" },
+            { id: 25, name: "Canapé (2 places)", vol: 2, cat: "General" },
+            { id: 26, name: "Canapé (3 places)", vol: 3, cat: "General" },
+            { id: 27, name: "Canapé d'angle", vol: 3.5, cat: "General" },
+            { id: 28, name: "Carton livre", vol: 0.05, cat: "General" },
+            { id: 29, name: "Carton penderie", vol: 0.25, cat: "General" },
+            { id: 30, name: "Carton standard", vol: 0.1, cat: "General" },
+            { id: 31, name: "Carton vaisselle", vol: 0.1, cat: "General" },
+            { id: 32, name: "Chaîne HiFi", vol: 0.5, cat: "General" },
+            { id: 33, name: "Chaise", vol: 0.2, cat: "General" },
+            { id: 34, name: "Chaise de bureau", vol: 0.3, cat: "General" },
+            { id: 35, name: "Chaise pliante", vol: 0.1, cat: "General" },
+            { id: 36, name: "Chiffonnier / Semainier", vol: 0.5, cat: "General" },
+            { id: 37, name: "Climatiseur", vol: 0.3, cat: "General" },
+            { id: 38, name: "Coffre (grand)", vol: 1, cat: "General" },
+            { id: 39, name: "Coffre (moyen)", vol: 0.5, cat: "General" },
+            { id: 40, name: "Coffre (petit)", vol: 0.25, cat: "General" },
+            { id: 41, name: "Coiffeuse", vol: 0.5, cat: "General" },
+            { id: 42, name: "Commode (petit)", vol: 0.5, cat: "General" },
+            { id: 43, name: "Commode (moyen)", vol: 1, cat: "General" },
+            { id: 44, name: "Congélateur coffre (moyen / grand)", vol: 1, cat: "General" },
+            { id: 45, name: "Congélateur coffre (petit)", vol: 0.5, cat: "General" },
+            { id: 46, name: "Console", vol: 0.5, cat: "General" },
+            { id: 47, name: "Decrochage", vol: 0, cat: "General" },
+            { id: 48, name: "Demontage / Remontage", vol: 0, cat: "General" },
+            { id: 49, name: "Desserte", vol: 0.3, cat: "General" },
+            { id: 50, name: "Divers / M3 supplementaire", vol: 1, cat: "General" },
+            { id: 51, name: "Echelle", vol: 0.15, cat: "General" },
+            { id: 52, name: "Ecran", vol: 0.2, cat: "General" },
+            { id: 53, name: "Etabli", vol: 1.3, cat: "General" },
+            { id: 54, name: "Etagère", vol: 0.5, cat: "General" },
+            { id: 55, name: "Fauteuil", vol: 1, cat: "General" },
+            { id: 56, name: "Fauteuil (petit)", vol: 0.5, cat: "General" },
+            { id: 57, name: "Four", vol: 1, cat: "General" },
+            { id: 58, name: "Fragile", vol: 0, cat: "General" },
+            { id: 59, name: "Guéridon", vol: 0.5, cat: "General" },
+            { id: 60, name: "Imprimante", vol: 0.3, cat: "General" },
+            { id: 61, name: "Jardinière", vol: 0.3, cat: "General" },
+            { id: 62, name: "Lampadaire / Halogène", vol: 0.5, cat: "General" },
+            { id: 63, name: "Lampadaire / Halogène (petit)", vol: 0.25, cat: "General" },
+            { id: 64, name: "Lampe", vol: 0.2, cat: "General" },
+            { id: 65, name: "Lave vaisselle", vol: 1, cat: "General" },
+            { id: 66, name: "Lit (1 place)", vol: 1, cat: "General" },
+            { id: 67, name: "Lit (2 place)", vol: 2, cat: "General" },
+            { id: 68, name: "Lit bébé", vol: 1.2, cat: "General" },
+            { id: 69, name: "Lit coffre (1 place)", vol: 1, cat: "General" },
+            { id: 70, name: "Lit coffre (2 places)", vol: 2, cat: "General" },
+            { id: 71, name: "Lit superposé / Mezzanine", vol: 2.5, cat: "General" },
+            { id: 72, name: "Lustre / Plafonnier", vol: 0.25, cat: "General" },
+            { id: 73, name: "Machine à laver", vol: 1, cat: "General" },
+            { id: 74, name: "Meuble à chaussures", vol: 1, cat: "General" },
+            { id: 75, name: "Meuble à chaussures (petit)", vol: 0.5, cat: "General" },
+            { id: 76, name: "Meuble haut/bas (1 bloc)", vol: 0.5, cat: "General" },
+            { id: 77, name: "Meuble haut/bas (2 bloc)", vol: 1, cat: "General" },
+            { id: 78, name: "Meuble haut/bas (3 bloc)", vol: 1.5, cat: "General" },
+            { id: 79, name: "Meuble haut/bas (4 bloc)", vol: 2, cat: "General" },
+            { id: 80, name: "Meuble Kallax (12 cases)", vol: 1, cat: "General" },
+            { id: 81, name: "Meuble Kallax (4 cases)", vol: 0.3, cat: "General" },
+            { id: 82, name: "Meuble Kallax (8 cases)", vol: 0.6, cat: "General" },
+            { id: 83, name: "Meuble TV", vol: 1, cat: "General" },
+            { id: 84, name: "Meuble TV (grand)", vol: 1.5, cat: "General" },
+            { id: 85, name: "Meuble TV (petit)", vol: 0.5, cat: "General" },
+            { id: 86, name: "Micro ondes", vol: 0.3, cat: "General" },
+            { id: 87, name: "Miroir (grand)", vol: 0.4, cat: "General" },
+            { id: 88, name: "Miroir (moyen)", vol: 0.2, cat: "General" },
+            { id: 89, name: "Miroir (petit)", vol: 0.1, cat: "General" },
+            { id: 90, name: "Ordinateur", vol: 0.1, cat: "General" },
+            { id: 91, name: "Panière à linge", vol: 0.3, cat: "General" },
+            { id: 92, name: "Parasol", vol: 0.3, cat: "General" },
+            { id: 93, name: "Petit électroménager", vol: 0.2, cat: "General" },
+            { id: 94, name: "Piano droit", vol: 2, cat: "General" },
+            { id: 95, name: "Piano électrique", vol: 0.3, cat: "General" },
+            { id: 96, name: "Plante (grand)", vol: 1, cat: "General" },
+            { id: 97, name: "Plante (moyen)", vol: 0.5, cat: "General" },
+            { id: 98, name: "Plante (petit)", vol: 0.25, cat: "General" },
+            { id: 99, name: "Plaque cuisson", vol: 0.3, cat: "General" },
+            { id: 100, name: "Porte manteaux", vol: 0.2, cat: "General" },
+            { id: 101, name: "Poubelle", vol: 0.2, cat: "General" },
+            { id: 102, name: "Pouf", vol: 0.5, cat: "General" },
+            { id: 103, name: "Pousette", vol: 0.5, cat: "General" },
+            { id: 104, name: "Refrigérateur", vol: 1, cat: "General" },
+            { id: 105, name: "Refrigérateur américain", vol: 2, cat: "General" },
+            { id: 106, name: "Sac", vol: 0.2, cat: "General" },
+            { id: 107, name: "Sèche linge", vol: 1, cat: "General" },
+            { id: 108, name: "Table (4p)", vol: 1, cat: "General" },
+            { id: 109, name: "Table (6p)", vol: 1.5, cat: "General" },
+            { id: 110, name: "Table (8p)", vol: 2, cat: "General" },
+            { id: 111, name: "Table à langer", vol: 1, cat: "General" },
+            { id: 112, name: "Table à repasser", vol: 0.15, cat: "General" },
+            { id: 113, name: "Table basse", vol: 0.5, cat: "General" },
+            { id: 114, name: "Table d'appoint", vol: 0.25, cat: "General" },
+            { id: 115, name: "Table de chevet", vol: 0.25, cat: "General" },
+            { id: 116, name: "Table pliante", vol: 0.25, cat: "General" },
+            { id: 117, name: "Tableau / Affiche (grand)", vol: 0.25, cat: "General" },
+            { id: 118, name: "Tableau / Affiche (moyen)", vol: 0.15, cat: "General" },
+            { id: 119, name: "Tableau / Affiche (petit)", vol: 0.1, cat: "General" },
+            { id: 120, name: "Tablette", vol: 0.2, cat: "General" },
+            { id: 121, name: "Tabouret", vol: 0.15, cat: "General" },
+            { id: 122, name: "Tabouret haut", vol: 0.3, cat: "General" },
+            { id: 123, name: "Tapis", vol: 0.2, cat: "General" },
+            { id: 124, name: "Tapis de course", vol: 0.5, cat: "General" },
+            { id: 125, name: "Tête de lit", vol: 0.4, cat: "General" },
+            { id: 126, name: "Tondeuse", vol: 0.4, cat: "General" },
+            { id: 127, name: "TV", vol: 0.3, cat: "General" },
+            { id: 128, name: "Vaisselier (1 porte)", vol: 1, cat: "General" },
+            { id: 129, name: "Vaisselier (2 porte)", vol: 2, cat: "General" },
+            { id: 130, name: "Vaisselier (3 porte)", vol: 3, cat: "General" },
+            { id: 131, name: "Vaisselier (4 porte)", vol: 4, cat: "General" },
+            { id: 132, name: "Valise", vol: 0.3, cat: "General" },
+            { id: 133, name: "Vase", vol: 0.15, cat: "General" },
+            { id: 134, name: "Vase (grand)", vol: 0.3, cat: "General" },
+            { id: 135, name: "Vélo", vol: 0.3, cat: "General" },
+            { id: 136, name: "Vélo elliptique", vol: 0.5, cat: "General" },
+            { id: 137, name: "Ventilateur", vol: 0.2, cat: "General" },
+            { id: 138, name: "Guéridon (petit)", vol: 0.25, cat: "General" },
+            { id: 139, name: "Commode (grand)", vol: 1.5, cat: "General" },
+            { id: 140, name: "Buffet d'appoint", vol: 0.5, cat: "General" },
+            { id: 141, name: "Tables gigognes", vol: 0.3, cat: "General" },
+            { id: 142, name: "transat", vol: 0.3, cat: "General" },
+            { id: 143, name: "chaise haute", vol: 0.25, cat: "General" },
+            { id: 144, name: "TV (grand)", vol: 0.5, cat: "General" },
+            { id: 145, name: "Lourd", vol: 0, cat: "General" },
+            { id: 146, name: "Armoire d'angle", vol: 2.5, cat: "General" },
+            { id: 147, name: "Etagère (petit)", vol: 0.25, cat: "General" },
+            { id: 148, name: "Caisse plastique (petit)", vol: 0.2, cat: "General" },
+            { id: 149, name: "Meuble Kallax (16 cases)", vol: 0.2, cat: "General" },
+            { id: 150, name: "Plante (petit-)", vol: 0.2, cat: "General" },
+        ];
+
+        const DEFAULT_NOTES = ` 
+Adresse de chargement : 
+
+Logement : 
+Étage : 
+Escalier : 
+Ascenseur : 
+Portage : 
+Autre :
+
+——
+Adresse de déchargement : 
+
+Logement :
+Étage :
+Escalier :
+Ascenseur : 
+Portage : 
+Autre : 
+
+——
+Date du déménagement :
+
+——
+Inventaire : 
+
+`;
+
+        // State Global
+        let state = {
+            catalog: JSON.parse(localStorage.getItem('h2_catalog')) || [], // Start empty to prioritize cloud
+            inventory: JSON.parse(localStorage.getItem('h2_inventory')) || [],
+            notes: localStorage.getItem('h2_notes') || DEFAULT_NOTES,
+            currentRoom: 'Generale',
+            isAdmin: false
         };
 
-        // 2. Génération de la Grille Tarifaire (Matrix)
-        const generateInitialMatrix = () => {
-          const matrix = [];
-          for (let m3 = 1; m3 <= 80; m3++) {
-            let totalPrice = 135; 
-            let etage = 1; 
-            let portage = 1; 
-            let confort = 150;
+        // Firebase Vars
+        let db, auth;
+        let pendingSecureAction = null;
+        let currentConfirmCallback = null;
+
+        // --- 2. INITIALISATION ---
+
+        const initApp = async () => {
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'h2-logistique';
             
-            if (m3 >= 66) totalPrice = 435; 
-            else if (m3 >= 46) totalPrice = 335; 
-            else if (m3 >= 26) totalPrice = 235; 
-            else {
-                if (m3 === 1) totalPrice = 170;
-                if (m3 === 2) totalPrice = 150;
-                if (m3 === 3) totalPrice = 145;
-                if (m3 === 4 || m3 === 5) totalPrice = 140;
+            if (Object.keys(firebaseConfig).length > 0) {
+                const app = firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
+                    setupRealtimeListener(appId);
+                } catch (e) {
+                    console.error("Auth Error", e);
+                }
+            } else {
+                // Local only fallback
+                if(state.catalog.length === 0) state.catalog = INITIAL_CATALOG;
+                renderCatalog();
             }
 
-            const priceString = totalPrice.toString();
-            const camion = parseInt(priceString.charAt(0)); 
-            const prixRestant = parseInt(priceString.substring(1));
-            const distance = camion * 1200;
-
-            if (m3 >= 66) confort = 700;
-            else if (m3 >= 46) confort = 600;
-            else if (m3 >= 30) confort = 500;
-            else if (m3 >= 20) confort = 400;
-            else if (m3 >= 16) confort = 300;
-            else if (m3 >= 14) confort = 250;
-            else if (m3 >= 10) confort = 200;
-
-            matrix.push({
-              id: `vol-${m3}`,
-              m3: m3,
-              camion: camion,
-              prix: prixRestant,
-              etage: etage,
-              portage: portage,
-              confort: confort,
-              distance: distance
-            });
-          }
-          return matrix;
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('notepad-area').value = state.notes;
+            
+            renderCatalog();
+            renderInventory();
+            updateTotalHeader();
+            setupEventListeners();
         };
 
-        // --- COMPOSANTS ---
+        // --- 3. RENDERING ---
 
-        const AdminPage = ({ prices, setPrices, matrixData, setMatrixData, onBack, initialData }) => {
-          const handleMatrixChange = (id, field, value) => {
-            const numValue = parseFloat(value);
-            setMatrixData(prev => prev.map(row => 
-              row.id === id ? { ...row, [field]: isNaN(numValue) ? 0 : numValue } : row
-            ));
-          };
+        function renderCatalog() {
+            const listEl = document.getElementById('catalog-list');
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const room = state.currentRoom;
+            
+            // Filter catalog and Sort alphabetically
+            const filtered = state.catalog.filter(item => 
+                item.name.toLowerCase().includes(search)
+            ).sort((a, b) => a.name.localeCompare(b.name));
 
-          const handlePriceChange = (id, value) => {
-            const val = parseFloat(value) || 0;
-            setPrices(prev => ({ ...prev, [id]: val >= 0 ? val : 0 }));
-          };
+            listEl.innerHTML = '';
 
-          const renderPriceEditSection = (title, items) => (
-            <div>
-              <h4 className="font-semibold text-slate-700 mb-3 border-b pb-2">{title}</h4>
-              <div className="space-y-3">
-                {items.map(item => (
-                  <div key={item.id} className="flex justify-between items-center bg-slate-50 p-3 rounded">
-                    <span className="text-sm font-medium text-slate-700">{item.name}</span>
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="number" 
-                        value={prices[item.id]} 
-                        onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                        className="w-24 p-1 text-right border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                      <span className="text-slate-500 text-sm">€</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
+            filtered.forEach(item => {
+                const invItem = state.inventory.find(i => i.itemId === item.id && i.room === room);
+                const currentQty = invItem ? invItem.qty : 0;
 
-          return (
-            <div className="bg-white min-h-screen pb-12">
-              <div className="bg-slate-900 text-white px-6 py-4 sticky top-0 z-20 shadow-md flex justify-between items-center no-print">
-                <div className="flex items-center gap-3">
-                  <Lock size={24} className="text-red-400" />
-                  <h2 className="text-xl font-bold">Console Administrateur</h2>
-                </div>
-                <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">
-                  <ArrowLeft size={16} /> Retour
-                </button>
-              </div>
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-300 transition-colors";
+                if(currentQty > 0) div.classList.add('bg-blue-50/30');
 
-              <div className="max-w-7xl mx-auto p-6 space-y-8">
-                <p className="text-slate-500 italic border-l-4 border-blue-500 pl-4 py-2 bg-blue-50">
-                  Toutes les modifications sont sauvegardées pour la session en cours.
-                </p>
-
-                <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
-                    <Edit3 size={20} className="text-blue-600" />
-                    <h3 className="font-bold text-lg text-slate-800">1. Prix Unitaires</h3>
-                  </div>
-                  <div className="p-6 grid md:grid-cols-2 gap-8">
-                    {renderPriceEditSection("Prestation", initialData.prestation)}
-                    {renderPriceEditSection("Monte Meuble & AOT", initialData.ra_monte_meuble)}
-                    {renderPriceEditSection("Matériel", initialData.materiel)}
-                    {renderPriceEditSection("Confort", initialData.confort)}
-                    {renderPriceEditSection("Longue Distance", initialData.distance)}
-                  </div>
-                </section>
-
-                <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
-                  <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TableIcon size={20} className="text-purple-600" />
-                      <h3 className="font-bold text-lg text-slate-800">2. Grille Tarifaire Cubage</h3>
-                    </div>
-                    <div className="text-xs text-slate-500 bg-white px-2 py-1 rounded border">
-                      {matrixData.length} lignes chargées
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 overflow-auto">
-                    <table className="w-full text-sm text-left border-collapse">
-                      <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10 shadow-sm">
-                        <tr>
-                          <th className="px-4 py-3 border-b border-r bg-slate-100 w-16 text-center">m³</th>
-                          <th className="px-4 py-3 border-b w-24 text-center bg-amber-50 text-amber-900 border-r border-amber-100">Camion</th>
-                          <th className="px-4 py-3 border-b w-32 text-right text-blue-800">Prix (€)</th>
-                          <th className="px-4 py-3 border-b w-32 text-right">Étage (€)</th>
-                          <th className="px-4 py-3 border-b w-32 text-right">Portage (€)</th>
-                          <th className="px-4 py-3 border-b w-32 text-right">Confort (€)</th>
-                          <th className="px-4 py-3 border-b w-40 text-right text-purple-800">Longue Dist. (€)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {matrixData.map((row) => (
-                          <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-2 font-bold text-center bg-slate-50 border-r text-slate-700">{row.m3}</td>
-                            <td className="px-2 py-1 bg-amber-50/50 border-r border-amber-100">
-                              <input 
-                                type="number" 
-                                value={row.camion}
-                                onChange={(e) => handleMatrixChange(row.id, 'camion', e.target.value)}
-                                className="w-full text-center p-2 border border-transparent hover:border-amber-300 focus:border-amber-500 focus:bg-amber-100 rounded outline-none bg-transparent font-bold text-amber-700"
-                              />
-                            </td>
-                            <td className="px-2 py-1"><input type="number" value={row.prix} onChange={(e) => handleMatrixChange(row.id, 'prix', e.target.value)} className="w-full text-right p-2 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-blue-50 rounded outline-none bg-transparent font-medium text-blue-700" /></td>
-                            <td className="px-2 py-1"><input type="number" step="0.10" value={row.etage} onChange={(e) => handleMatrixChange(row.id, 'etage', e.target.value)} className="w-full text-right p-2 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-blue-50 rounded outline-none bg-transparent" /></td>
-                            <td className="px-2 py-1"><input type="number" step="0.10" value={row.portage} onChange={(e) => handleMatrixChange(row.id, 'portage', e.target.value)} className="w-full text-right p-2 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-blue-50 rounded outline-none bg-transparent" /></td>
-                            <td className="px-2 py-1"><input type="number" value={row.confort} onChange={(e) => handleMatrixChange(row.id, 'confort', e.target.value)} className="w-full text-right p-2 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-blue-50 rounded outline-none bg-transparent" /></td>
-                            <td className="px-2 py-1 bg-purple-50/30"><input type="number" value={row.distance} onChange={(e) => handleMatrixChange(row.id, 'distance', e.target.value)} className="w-full text-right p-2 border border-transparent hover:border-slate-300 focus:border-purple-500 focus:bg-purple-50 rounded outline-none bg-transparent font-medium text-purple-700" /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </div>
-            </div>
-          );
-        };
-
-        // Composant de section de table pliable
-        const TableSection = ({ 
-          title, 
-          items, 
-          colorClass, 
-          quantities, 
-          prices, 
-          onQuantityChange, 
-          formatCurrency,
-          calculateRowTotal,
-          defaultExpanded = true,
-          quantityLabel = "Quantité",
-          disableQuantityInput = false,
-          extraHeaderContent = null,
-          onClear 
-        }) => {
-          const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-          const sectionTotal = items.reduce((sum, item) => sum + calculateRowTotal(item.id), 0);
-          const booleanItems = ['p5', 'p6', 'p7', 'l3', 'l4', 'ra1', 'ra2', 'ra3'];
-
-          return (
-            <div className="mb-4 bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
-              <div className={`px-6 py-4 ${colorClass} border-b border-slate-200`}>
-                <div className="flex justify-between items-center">
-                    <div 
-                        className="flex items-center gap-3 cursor-pointer select-none flex-grow"
-                        onClick={() => setIsExpanded(!isExpanded)}
-                    >
-                        <h3 className="font-bold text-lg">{title}</h3>
-                        {!isExpanded && (
-                            <span className="text-sm font-medium text-slate-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                                {formatCurrency(sectionTotal)}
-                            </span>
-                        )}
+                div.innerHTML = `
+                    <div class="flex-1 pr-2">
+                        <div class="font-semibold text-sm text-slate-800">${item.name}</div>
+                        <div class="text-xs text-slate-500 font-mono">${item.vol.toFixed(2)} m³</div>
+                        
+                        <!-- Admin Only Buttons -->
+                        <div class="flex gap-2 mt-1 admin-only">
+                             <button onclick="loadItemForEdit(${item.id})" class="text-[10px] text-blue-400 hover:text-blue-600 underline">Modifier</button>
+                             <button onclick="deleteCatalogItem(${item.id})" class="text-[10px] text-slate-300 hover:text-red-500 underline flex items-center gap-1">Suppr.</button>
+                        </div>
                     </div>
                     
-                    <div className="flex items-center gap-4">
-                        {extraHeaderContent && (
-                            <div onClick={(e) => e.stopPropagation()}>
-                                {extraHeaderContent}
-                            </div>
-                        )}
-
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onClear(items); }}
-                            className="opacity-70 hover:opacity-100 hover:text-red-400 p-1 rounded transition-colors"
-                            title="Effacer ce segment"
-                        >
-                            <Trash2 size={18} />
+                    <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5 shadow-sm">
+                        <button onclick="updateQty('${room}', ${item.id}, -1)" class="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-red-600 hover:bg-white rounded transition active:scale-95 touch-target ${currentQty === 0 ? 'opacity-30 pointer-events-none' : ''}">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
                         </button>
                         
-                        <div 
-                            className="cursor-pointer ml-2"
-                            onClick={() => setIsExpanded(!isExpanded)}
-                        >
-                            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        </div>
-                    </div>
-                </div>
-              </div>
-              
-              {isExpanded && (
-                <div className="overflow-x-auto animate-in fade-in slide-in-from-top-2 duration-200">
-                    <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                        <tr>
-                        <th className="px-6 py-3 w-1/3">Désignation</th>
-                        <th className="px-6 py-3 w-1/4 text-center">{quantityLabel}</th>
-                        <th className="px-6 py-3 w-1/4 text-right">Unité de prix</th>
-                        <th className="px-6 py-3 w-1/6 text-right">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {items.map((item) => {
-                        const qtyValue = quantities[item.id];
-                        const displayQty = (qtyValue === 0 || qtyValue === undefined) ? '' : qtyValue;
-                        const isBoolean = booleanItems.includes(item.id);
-                        const isDisabled = disableQuantityInput || item.readOnlyQuantity;
+                        <span class="w-6 text-center font-bold text-sm text-slate-800">${currentQty}</span>
                         
-                        return (
-                            <tr key={item.id} className="border-b hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 font-medium text-slate-900">
-                                <div className="flex items-center gap-2">
-                                <span>{item.name}</span>
-                                {item.info && (
-                                    <div className="group relative flex items-center cursor-help">
-                                    <Info size={16} className="text-blue-400 hover:text-blue-600" />
-                                    <div className="absolute left-full ml-2 w-48 p-2 bg-slate-800 text-white text-xs rounded z-50 hidden group-hover:block shadow-lg">{item.info}</div>
-                                    </div>
-                                )}
-                                </div>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                                {isBoolean ? (
-                                    <div className="flex justify-center gap-1">
-                                        <button onClick={() => onQuantityChange(item.id, 1)} className={`px-3 py-1 text-xs font-semibold rounded-l-md border transition-colors ${qtyValue === 1 ? 'bg-green-600 text-white border-green-600' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>OUI</button>
-                                        <button onClick={() => onQuantityChange(item.id, 0)} className={`px-3 py-1 text-xs font-semibold rounded-r-md border transition-colors ${qtyValue === 0 ? 'bg-red-600 text-white border-red-600' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>NON</button>
-                                    </div>
-                                ) : (
-                                    <input type="number" min="0" max="999" value={displayQty} placeholder="0" disabled={isDisabled} onChange={(e) => onQuantityChange(item.id, e.target.value)} className={`w-24 text-center p-2 border border-slate-300 rounded-md outline-none transition-all ${isDisabled ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'}`} />
-                                )}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                {item.id === 'l2' ? <span className="text-slate-600 font-medium">{formatCurrency(prices[item.id])}</span> :
-                                 item.id === 'l4' ? <span className="text-slate-400 text-xs italic">Option</span> :
-                                 item.id === 'g1' ? <span className="text-slate-400 text-xs italic">Forfait</span> :
-                                 <span className="text-slate-600 font-medium">{formatCurrency(prices[item.id])}</span>}
-                            </td>
-                            <td className="px-6 py-4 text-right font-bold text-slate-700">{formatCurrency(calculateRowTotal(item.id))}</td>
-                            </tr>
-                        );
-                        })}
-                        <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
-                        <td colSpan="3" className="px-6 py-4 text-right text-slate-600 uppercase text-xs tracking-wider">Sous-total {title}</td>
-                        <td className="px-6 py-4 text-right text-slate-800 text-base">{formatCurrency(sectionTotal)}</td>
-                        </tr>
-                    </tbody>
-                    </table>
-                </div>
-              )}
-            </div>
-          );
-        };
-
-        const App = () => {
-          const [view, setView] = useState('calculator'); 
-          const [isAppAccessible, setIsAppAccessible] = useState(false);
-          const [accessCode, setAccessCode] = useState('');
-          const [accessError, setAccessError] = useState('');
-
-          // Prix Unitaires
-          const [prices, setPrices] = useState(() => {
-            const initialPrices = {};
-            [...INITIAL_DATA.prestation, ...INITIAL_DATA.ra_monte_meuble, ...INITIAL_DATA.materiel, ...INITIAL_DATA.confort, ...INITIAL_DATA.distance, ...INITIAL_DATA.groupage].forEach(item => initialPrices[item.id] = item.defaultPrice);
-            return initialPrices;
-          });
-
-          const [quantities, setQuantities] = useState(() => {
-            const initialQuantities = {};
-            [...INITIAL_DATA.prestation, ...INITIAL_DATA.ra_monte_meuble, ...INITIAL_DATA.materiel, ...INITIAL_DATA.confort, ...INITIAL_DATA.distance, ...INITIAL_DATA.groupage].forEach(item => {
-              initialQuantities[item.id] = 0;
+                        <button onclick="addToInventory(${item.id})" class="w-9 h-9 flex items-center justify-center text-blue-600 hover:bg-white rounded transition active:scale-95 touch-target">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                    </div>
+                `;
+                listEl.appendChild(div);
             });
-            return initialQuantities;
-          });
+        }
 
-          const [matrixData, setMatrixData] = useState(() => generateInitialMatrix());
-          const [adjustment, setAdjustment] = useState(0);
-          const [showLogin, setShowLogin] = useState(false);
-          const [passwordInput, setPasswordInput] = useState('');
-          const [loginError, setLoginError] = useState('');
-
-          // --- LOGIQUE DE MISE À JOUR DYNAMIQUE DES PRIX ---
-          const updatePricesBasedOnCubage = (cubageValue) => {
-            const volume = parseInt(cubageValue) || 0;
-            if (volume <= 0) return;
-            const row = matrixData.find(r => r.m3 === volume);
-            if (row) {
-              setPrices(prev => ({ ...prev, 'p1': row.prix, 'p2': row.etage, 'p4': row.portage, 'c1': row.confort, 'l1': 1200 }));
-              setQuantities(prev => ({ ...prev, 'l1': row.camion }));
-            }
-          };
-
-          const handleAccessSubmit = (e) => {
-            e.preventDefault();
-            if (accessCode === '1010') { setIsAppAccessible(true); setAccessError(''); } else { setAccessError("Code d'accès incorrect"); }
-          };
-
-          const handleLogin = (e) => {
-            e.preventDefault();
-            if (passwordInput === '2525') { setView('admin'); setShowLogin(false); setPasswordInput(''); setLoginError(''); } else { setLoginError('Mot de passe incorrect'); }
-          };
-
-          const handleQuantityChange = (id, value) => {
-            let newVal = 0;
-            if (typeof value === 'number') newVal = value;
-            else if (value !== '') { newVal = parseInt(value); if (isNaN(newVal)) newVal = 0; }
-
-            setQuantities(prev => {
-                const nextQuantities = { ...prev, [id]: value === '' ? 0 : newVal };
-                const materialIds = ['m1', 'm2', 'm3', 'm4', 'm5'];
-                if (materialIds.includes(id)) {
-                    const hasMaterial = materialIds.some(matId => { const q = (matId === id) ? newVal : prev[matId]; return q > 0; });
-                    nextQuantities['m6'] = hasMaterial ? 1 : 0;
-                }
-                return nextQuantities;
-            });
-            if (id === 'p1') updatePricesBasedOnCubage(newVal);
-          };
-
-          const handleClearSection = (items) => {
-            setQuantities(prev => {
-                const nextQuantities = { ...prev };
-                let isMaterielSection = false;
-                items.forEach(item => {
-                    if (!item.readOnlyQuantity) nextQuantities[item.id] = 0;
-                    if (['m1', 'm2', 'm3', 'm4', 'm5'].includes(item.id)) isMaterielSection = true;
-                });
-                if (items.some(i => i.id === 'p1')) nextQuantities['l1'] = 0;
-                if (isMaterielSection) nextQuantities['m6'] = 0;
-                return nextQuantities;
-            });
-          };
-
-          const handleGlobalClear = () => {
-            const initialQs = {};
-            [...INITIAL_DATA.prestation, ...INITIAL_DATA.ra_monte_meuble, ...INITIAL_DATA.materiel, ...INITIAL_DATA.confort, ...INITIAL_DATA.distance, ...INITIAL_DATA.groupage].forEach(item => initialQs[item.id] = 0);
-            setQuantities(initialQs);
-            setAdjustment(0);
-          };
-
-          const calculateRowTotal = (id) => {
-            const qty = quantities[id] || 0;
-            const price = prices[id] || 0;
-            const isGroupageActive = quantities['l4'] === 1;
-            const isMorningActive = quantities['l3'] === 1;
-
-            if (id === 'p8') {
-                if (qty < 50) return 0;
-                const nbCamions = quantities['l1'] || 0;
-                return qty * price * nbCamions;
-            }
-            if (id === 'p2' || id === 'p4') {
-              const cubageQty = quantities['p1'] || 0;
-              const rawTotal = price * cubageQty * qty;
-              return Math.floor(rawTotal / 10) * 10;
-            }
-            const dist = quantities['l2'] || 0;
-            const applyKmPrice = dist > 550;
-
-            if (id === 'l1') { if (isGroupageActive || applyKmPrice) return 0; return qty * 1200; }
-            if (id === 'l2') { 
-                if (applyKmPrice) { 
-                    if (isGroupageActive) { 
-                        // Cas B Groupage (> 550km)
-                        const cubage = quantities['p1'] || 0; 
-                        const groupageCalc = ((dist * 2.2) / 20) * cubage * 1.2; // REPLACED: * 1.3 by * 1.2
-                        // Plafond logique (vs Standard)
-                        const standardPrice = dist * 2.2;
-                        return Math.min(groupageCalc, standardPrice);
-                    } 
-                    return dist * 2.2; 
-                } 
-                return 0; 
-            }
-            if (id === 'l3') { 
-                if (isGroupageActive) return 0; 
-                const nbCamions = quantities['l1'] || 0; 
-                if (qty === 1) return nbCamions >= 3 ? 800 : 400; 
-                return 0; 
-            }
-            if (id === 'l4') { 
-                if (qty === 1) { 
-                    if (applyKmPrice) {
-                        return 0; 
-                    } else { 
-                        // Cas A Groupage (<= 550km)
-                        const cubage = quantities['p1'] || 0; 
-                        const groupageCalc = (cubage * (1200 / 20)) * 1.2; // REPLACED: * 1.3 by * 1.2
-                        // Plafond (vs Standard Camion)
-                        const nbCamions = quantities['l1'] || 0;
-                        const standardPrice = nbCamions * 1200;
-                        return Math.min(groupageCalc, standardPrice);
-                    } 
-                } 
-                return 0; 
-            }
-            if (id === 'g1') return 0; 
+        function renderInventory() {
+            const listEl = document.getElementById('inventory-list');
             
-            if (['ra1', 'ra2', 'ra3'].includes(id)) {
-                return qty * price;
+            if (state.inventory.length === 0) {
+                listEl.innerHTML = `
+                    <div id="empty-state" class="flex flex-col items-center justify-center h-64 text-slate-400">
+                        <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                        <p class="text-sm">Aucun objet ajouté</p>
+                        <p class="text-xs mt-1">Sélectionnez une pièce et ajoutez des objets.</p>
+                    </div>`;
+                return;
+            }
+            
+            listEl.innerHTML = '';
+
+            const grouped = state.inventory.reduce((acc, item) => {
+                acc[item.room] = acc[item.room] || [];
+                acc[item.room].push(item);
+                return acc;
+            }, {});
+
+            Object.keys(grouped).forEach(room => {
+                const roomItems = grouped[room];
+                const roomTotal = roomItems.reduce((sum, item) => sum + (item.vol * item.qty), 0);
+                
+                const section = document.createElement('div');
+                section.className = "mb-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm";
+                
+                section.innerHTML = `
+                    <div class="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
+                        <span class="font-bold text-sm text-slate-700 uppercase tracking-wide">${room}</span>
+                        <span class="text-xs font-mono font-bold text-blue-600">${roomTotal.toFixed(2)} m³</span>
+                    </div>
+                    <div class="divide-y divide-slate-50">
+                        ${roomItems.map(item => `
+                            <div class="p-3 flex items-center justify-between">
+                                <div class="flex-1">
+                                    <div class="text-sm font-medium text-slate-800">${item.name}</div>
+                                    <div class="text-[10px] text-slate-400">PU: ${item.vol} | Total: ${(item.vol * item.qty).toFixed(2)}</div>
+                                </div>
+                                <div class="flex items-center gap-2 bg-slate-50 rounded-lg p-0.5 border border-slate-100">
+                                    <button onclick="updateQty('${item.room}', ${item.itemId}, -1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-500 hover:bg-white rounded transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                                    </button>
+                                    <span class="w-6 text-center font-bold text-sm text-slate-700">${item.qty}</span>
+                                    <button onclick="updateQty('${item.room}', ${item.itemId}, 1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-blue-500 hover:bg-white rounded transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                listEl.appendChild(section);
+            });
+        }
+
+        function updateTotalHeader() {
+            const total = state.inventory.reduce((sum, item) => sum + (item.vol * item.qty), 0);
+            document.getElementById('header-total-volume').textContent = total.toFixed(2);
+        }
+
+        // --- 4. LOGIC & ACTIONS ---
+
+        function addToInventory(itemId) {
+            const catalogItem = state.catalog.find(i => i.id === itemId);
+            if (!catalogItem) return;
+
+            const room = document.getElementById('room-selector').value;
+            const existing = state.inventory.find(i => i.itemId === itemId && i.room === room);
+
+            if (existing) {
+                existing.qty++;
+            } else {
+                state.inventory.push({
+                    itemId: catalogItem.id,
+                    name: catalogItem.name,
+                    vol: catalogItem.vol,
+                    qty: 1,
+                    room: room
+                });
+            }
+            
+            saveData();
+            renderCatalog();
+            renderInventory();
+            updateTotalHeader();
+        }
+
+        function updateQty(room, itemId, delta) {
+            const idx = state.inventory.findIndex(i => i.itemId === itemId && i.room === room);
+            if (idx === -1) {
+                if (delta > 0) addToInventory(itemId); 
+                return;
             }
 
-            return qty * price;
-          };
+            state.inventory[idx].qty += delta;
 
-          const calculateSectionTotal = (items) => items.reduce((sum, item) => sum + calculateRowTotal(item.id), 0);
-          const formatCurrency = (value) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value);
-          const roundTo10 = (val) => Math.floor(val / 10) * 10;
+            if (state.inventory[idx].qty <= 0) {
+                state.inventory.splice(idx, 1);
+            }
+            
+            saveData();
+            renderCatalog();
+            renderInventory();
+            updateTotalHeader();
+        }
 
-          const cubageQty = quantities['p1'] || 0;
-          const prestationTotal = calculateSectionTotal(INITIAL_DATA.prestation);
-          const raTotal = calculateSectionTotal(INITIAL_DATA.ra_monte_meuble);
-          const materielTotalRaw = calculateSectionTotal(INITIAL_DATA.materiel);
-          const distanceSectionTotal = calculateSectionTotal(INITIAL_DATA.distance);
-          const materielTotal = roundTo10(materielTotalRaw);
-          const baseTotal = roundTo10(prestationTotal + raTotal + materielTotal);
-          const confortTotalBase = cubageQty > 0 ? roundTo10(baseTotal + (prices['c1'] || 0)) : 0;
-          
-          // Calcul Offre 3:
-          const p1Total = calculateRowTotal('p1');
-          const p8Total = calculateRowTotal('p8');
-          const prestationLongDistanceAddon = prestationTotal - p1Total - p8Total;
-          
-          // Pour l'offre 3, on s'assure d'utiliser le total de section qui contient déjà la logique de plafonnement (via calculateRowTotal)
-          
-          // On doit recalculer le prix "Longue Distance Standard" et "Prix Groupage" pour appliquer le plafond globalement dans le récapitulatif aussi.
-          // Note: calculateRowTotal le fait DÉJÀ ligne par ligne (l4 ou l2). 
-          // Donc distanceSectionTotal est déjà plafonné *au niveau de la ligne*.
-          // Cependant, pour être rigoureux sur le total "Offre Groupage" vs "Offre Longue Distance Standard", 
-          // la logique est :
-          // Si Groupage coché -> Offre 3 = (Prix Groupage Plafonné) + Matériel + PrestationAddon
-          // Si Groupage NON coché -> Offre 3 = (Prix Standard) + Matériel + PrestationAddon
-          
-          // distanceSectionTotal contient déjà le bon chiffre selon que l4 est coché ou non.
-          
-          const thirdOfferTotalBase = roundTo10(distanceSectionTotal + materielTotal + raTotal + prestationLongDistanceAddon);
+        // --- 5. CATALOG MANAGEMENT (SECURED & CLOUD) ---
 
-          const applyAdjustment = (amount) => amount + (amount * (adjustment / 100));
-          const standardFinal = roundTo10(applyAdjustment(baseTotal));
-          const confortFinal = roundTo10(applyAdjustment(confortTotalBase));
-          const thirdOfferFinal = roundTo10(applyAdjustment(thirdOfferTotalBase));
-          const standardAdjAmount = standardFinal - baseTotal;
-          const confortAdjAmount = confortFinal - confortTotalBase;
-          const thirdOfferAdjAmount = thirdOfferFinal - thirdOfferTotalBase;
-          const isGroupageActive = quantities['l4'] === 1;
+        function toggleAdminMode() {
+            if (state.isAdmin) {
+                // Toggle Off
+                state.isAdmin = false;
+                document.body.classList.remove('admin-mode');
+                document.getElementById('admin-indicator').classList.add('hidden');
+                document.getElementById('admin-form').classList.remove('admin-block'); // Force hide
+                showToast("Mode Admin désactivé");
+            } else {
+                // Ask Code
+                secureAction('enableAdmin');
+            }
+        }
 
-          if (!isAppAccessible) {
-            return (
-              <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
-                <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm animate-in fade-in zoom-in duration-300">
-                  <div className="flex justify-center mb-6"><div className="bg-slate-800 p-4 rounded-full text-white shadow-lg"><KeyRound size={32} /></div></div>
-                  <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">H2 Logistique</h1>
-                  <p className="text-center text-slate-500 mb-6 text-sm">Accès sécurisé au calculateur</p>
-                  <form onSubmit={handleAccessSubmit}>
-                    <input type="password" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} placeholder="Code d'accès" className="w-full p-3 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-slate-500 outline-none text-center text-lg tracking-widest transition-all" autoFocus />
-                    {accessError && <p className="text-red-500 text-xs text-center mb-4 font-medium bg-red-50 p-2 rounded">{accessError}</p>}
-                    <button type="submit" className="w-full py-3 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 transition-all transform active:scale-95">Entrer</button>
-                  </form>
-                </div>
-              </div>
-            );
-          }
+        function enableAdminMode() {
+            state.isAdmin = true;
+            document.body.classList.add('admin-mode');
+            document.getElementById('admin-indicator').classList.remove('hidden');
+            showToast("Mode Admin activé");
+        }
 
-          if (view === 'admin') return <AdminPage prices={prices} setPrices={setPrices} matrixData={matrixData} setMatrixData={setMatrixData} initialData={INITIAL_DATA} onBack={() => setView('calculator')} />;
+        function saveCatalogItem() {
+            const idInput = document.getElementById('edit-item-id').value;
+            const name = document.getElementById('edit-item-name').value;
+            const vol = parseFloat(document.getElementById('edit-item-vol').value);
 
-          return (
-            <div className="min-h-screen bg-slate-100 p-4 md:p-8 font-sans text-slate-800">
-              <div className="max-w-4xl mx-auto">
-                <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 no-print">
-                  <div className="flex items-center gap-3"><div><h1 className="text-2xl font-extrabold text-slate-800">H2 Logistique</h1><p className="text-slate-500 text-sm">Calculateur de prix déménagement</p></div></div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={handleGlobalClear} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-full shadow-sm border border-red-200 hover:bg-red-100 transition-colors mr-2"><RotateCcw size={16} /> Tout Effacer</button>
-                    <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-full shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors"><Lock size={16} /> Admin</button>
-                  </div>
-                </header>
+            if (!name || isNaN(vol)) {
+                alert("Veuillez remplir le nom et le volume.");
+                return;
+            }
 
-                {showLogin && (
-                  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm animate-in fade-in zoom-in duration-200">
-                      <h2 className="text-xl font-bold mb-4">Accès Administrateur</h2>
-                      <form onSubmit={handleLogin}>
-                        <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Code" autoFocus className="w-full p-3 border border-slate-300 rounded-lg mb-2 focus:ring-2 focus:ring-blue-500 outline-none" />
-                        {loginError && <p className="text-red-500 text-sm mb-3">{loginError}</p>}
-                        <div className="flex gap-2 justify-end mt-4">
-                          <button type="button" onClick={() => { setShowLogin(false); setLoginError(''); setPasswordInput(''); }} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Annuler</button>
-                          <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Valider</button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                )}
+            if (idInput) {
+                const idx = state.catalog.findIndex(i => i.id == idInput);
+                if (idx !== -1) {
+                    state.catalog[idx].name = name;
+                    state.catalog[idx].vol = vol;
+                }
+            } else {
+                const newId = Date.now();
+                state.catalog.push({ id: newId, name, vol, cat: 'Custom' });
+            }
 
-                <TableSection title="1. Prestation de Service" items={INITIAL_DATA.prestation} colorClass="bg-slate-800 text-white" quantities={quantities} prices={prices} onQuantityChange={handleQuantityChange} formatCurrency={formatCurrency} calculateRowTotal={calculateRowTotal} onClear={handleClearSection} defaultExpanded={true} />
-                <TableSection title="2. Monte Meuble et AOT" items={INITIAL_DATA.ra_monte_meuble} colorClass="bg-slate-800 text-white" quantities={quantities} prices={prices} onQuantityChange={handleQuantityChange} formatCurrency={formatCurrency} calculateRowTotal={calculateRowTotal} onClear={handleClearSection} defaultExpanded={false} />
-                <TableSection title="3. Matériel & Livraison" items={INITIAL_DATA.materiel} colorClass="bg-slate-800 text-white" quantities={quantities} prices={prices} onQuantityChange={handleQuantityChange} formatCurrency={formatCurrency} calculateRowTotal={calculateRowTotal} onClear={handleClearSection} defaultExpanded={false} />
-                <TableSection title="4. Longue Distance" items={INITIAL_DATA.distance} colorClass="bg-slate-800 text-white" quantities={quantities} prices={prices} onQuantityChange={handleQuantityChange} formatCurrency={formatCurrency} calculateRowTotal={calculateRowTotal} onClear={handleClearSection} defaultExpanded={false} quantityLabel="Saisie" disableQuantityInput={false} />
+            // Reset Form
+            document.getElementById('edit-item-id').value = '';
+            document.getElementById('edit-item-name').value = '';
+            document.getElementById('edit-item-vol').value = '';
+            document.querySelector('details').removeAttribute('open');
 
-                <div className="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden mb-12">
-                    <div className="bg-slate-800 text-white px-6 py-4"><h3 className="font-bold text-lg">Tableau Récapitulatif des Offres</h3></div>
-                    <div className="p-6">
-                        <div className="mb-6 flex flex-col md:flex-row items-center gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                            <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">Remise / Majoration Commerciale :</label>
-                            <select value={adjustment} onChange={(e) => setAdjustment(parseInt(e.target.value))} className="w-full md:w-64 p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                <option value="-15">- 15% (Remise)</option>
-                                <option value="-10">- 10% (Remise)</option>
-                                <option value="-5">- 5% (Remise)</option>
-                                <option value="0">0%</option>
-                                <option value="5">+ 5% (Majoration)</option>
-                                <option value="10">+ 10% (Majoration)</option>
-                                <option value="15">+ 15% (Majoration)</option>
-                            </select>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                <div className="bg-blue-50 p-4 text-center border-b border-blue-100"><h4 className="font-bold text-blue-900 uppercase tracking-wider">Standard</h4></div>
-                                <div className="p-4 space-y-2">
-                                    <div className="flex justify-between text-sm text-slate-500"><span>Total HT :</span><span>{formatCurrency(baseTotal)}</span></div>
-                                    <div className="flex justify-between text-sm text-slate-500 border-b border-slate-100 pb-2"><span>Ajustement :</span><span className={adjustment < 0 ? 'text-green-600' : (adjustment > 0 ? 'text-red-600' : 'text-slate-600')}>{adjustment}% ({formatCurrency(standardAdjAmount)})</span></div>
-                                    <div className="pt-2 text-center"><span className="block text-xs text-slate-400 uppercase">Total TTC</span><span className="block text-2xl font-bold text-slate-800">{formatCurrency(standardFinal)}</span></div>
-                                </div>
-                            </div>
-                            <div className="border border-purple-200 rounded-lg overflow-hidden shadow-sm relative">
-                                <div className="bg-purple-50 p-4 text-center border-b border-purple-100"><h4 className="font-bold text-purple-900 uppercase tracking-wider">Confort</h4></div>
-                                <div className="p-4 space-y-2">
-                                    <div className="flex justify-between text-sm text-slate-500"><span>Total HT :</span><span>{formatCurrency(confortTotalBase)}</span></div>
-                                    <div className="flex justify-between text-sm text-slate-500 border-b border-slate-100 pb-2"><span>Ajustement :</span><span className={adjustment < 0 ? 'text-green-600' : (adjustment > 0 ? 'text-red-600' : 'text-slate-600')}>{adjustment}% ({formatCurrency(confortAdjAmount)})</span></div>
-                                    <div className="pt-2 text-center"><span className="block text-xs text-slate-400 uppercase">Total TTC</span><span className="block text-2xl font-bold text-purple-700">{formatCurrency(confortFinal)}</span></div>
-                                </div>
-                            </div>
-                            <div className={`border rounded-lg overflow-hidden ${isGroupageActive ? 'border-teal-200' : 'border-orange-200'}`}>
-                                <div className={`${isGroupageActive ? 'bg-teal-50 border-teal-100' : 'bg-orange-50 border-orange-100'} p-4 text-center border-b`}><h4 className={`font-bold uppercase tracking-wider ${isGroupageActive ? 'text-teal-900' : 'text-orange-900'}`}>{isGroupageActive ? 'Groupage' : 'Longue Distance'}</h4></div>
-                                <div className="p-4 space-y-2">
-                                    <div className="flex justify-between text-sm text-slate-500"><span>Total HT :</span><span>{formatCurrency(thirdOfferTotalBase)}</span></div>
-                                    <div className="flex justify-between text-sm text-slate-500 border-b border-slate-100 pb-2"><span>Ajustement :</span><span className={adjustment < 0 ? 'text-green-600' : (adjustment > 0 ? 'text-red-600' : 'text-slate-600')}>{adjustment}% ({formatCurrency(thirdOfferAdjAmount)})</span></div>
-                                    <div className="pt-2 text-center"><span className="block text-xs text-slate-400 uppercase">Total TTC</span><span className={`block text-2xl font-bold ${isGroupageActive ? 'text-teal-800' : 'text-slate-800'}`}>{formatCurrency(thirdOfferFinal)}</span></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-6 flex justify-end no-print">
-                            <button onClick={() => window.print()} className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-2 px-4 py-2 border border-blue-200 rounded-full hover:bg-blue-50 transition-colors">
-                                <Save size={16} /> Imprimer / Sauvegarder le Devis
-                            </button>
-                        </div>
-                    </div>
-                </div>
-              </div>
-            </div>
-          );
-        };
+            saveData();
+            updateCloudCatalog();
+            renderCatalog();
+            showToast("Catalogue mis à jour pour tous !");
+        }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        function deleteCatalogItem(id) {
+            if(!confirm("Supprimer cet objet du catalogue global ?")) return;
+            const idx = state.catalog.findIndex(i => i.id === id);
+            if(idx !== -1) {
+                state.catalog.splice(idx, 1);
+                saveData();
+                updateCloudCatalog();
+                renderCatalog();
+                showToast("Objet supprimé");
+            }
+        }
+
+        async function updateCloudCatalog() {
+            if (!auth.currentUser || !db) return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'h2-logistique';
+            const dataRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
+            
+            try {
+                await dataRef.set({
+                    catalog: state.catalog,
+                    lastCatalogUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            } catch (err) {
+                console.error("Cloud Catalog Update Failed", err);
+            }
+        }
+
+        function loadItemForEdit(id) {
+            const item = state.catalog.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('edit-item-id').value = item.id;
+            document.getElementById('edit-item-name').value = item.name;
+            document.getElementById('edit-item-vol').value = item.vol;
+            document.querySelector('details').setAttribute('open', 'true');
+            document.querySelector('details').scrollIntoView({behavior: 'smooth'});
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = '';
+            renderCatalog();
+            document.getElementById('clear-search-btn').classList.add('hidden');
+            searchInput.focus();
+        }
+
+        // --- 6. SECURITY & UTILS ---
+        
+        function verifyAppAccess() {
+            const input = document.getElementById('app-access-input');
+            const errorMsg = document.getElementById('app-access-error');
+            const modal = document.getElementById('app-lock-modal');
+            
+            if (input.value === "1010") {
+                // Success animation
+                input.classList.add('border-green-500', 'text-green-600');
+                setTimeout(() => {
+                    modal.classList.add('opacity-0', 'pointer-events-none');
+                    setTimeout(() => modal.style.display = 'none', 300);
+                }, 200);
+            } else {
+                // Error animation
+                errorMsg.classList.remove('hidden');
+                input.value = '';
+                input.classList.add('border-red-500', 'animate-pulse');
+                setTimeout(() => input.classList.remove('border-red-500', 'animate-pulse'), 500);
+                input.focus();
+            }
+        }
+
+        function openConfirm(msg, callback) {
+            document.getElementById('confirm-msg').textContent = msg;
+            currentConfirmCallback = callback;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+            document.getElementById('confirm-modal').classList.add('flex');
+        }
+
+        function executeConfirm() {
+            if (currentConfirmCallback) currentConfirmCallback();
+            closeModal('confirm-modal');
+            currentConfirmCallback = null;
+        }
+
+        function askClearInventory() {
+            openConfirm("Voulez-vous vraiment vider tout l'inventaire ?", () => {
+                state.inventory = [];
+                saveData();
+                renderCatalog(); 
+                renderInventory();
+                updateTotalHeader();
+                showToast("Inventaire vidé");
+            });
+        }
+        
+        function askResetNotes() {
+             openConfirm("Voulez-vous vraiment vider toutes les notes ?", () => {
+                state.notes = DEFAULT_NOTES;
+                document.getElementById('notepad-area').value = DEFAULT_NOTES;
+                saveData();
+                showToast("Notes réinitialisées");
+             });
+        }
+
+        function secureAction(actionType, param = null) {
+            pendingSecureAction = { type: actionType, param: param };
+            document.getElementById('security-code-input').value = '';
+            document.getElementById('security-error').classList.add('hidden');
+            document.getElementById('security-modal').classList.remove('hidden');
+            document.getElementById('security-modal').classList.add('flex');
+            setTimeout(() => document.getElementById('security-code-input').focus(), 100);
+        }
+
+        function verifyCode() {
+            const input = document.getElementById('security-code-input').value;
+            if (input === "abc") {
+                closeModal('security-modal');
+                executeSecureAction();
+            } else {
+                document.getElementById('security-error').classList.remove('hidden');
+            }
+        }
+
+        function executeSecureAction() {
+            if (!pendingSecureAction) return;
+            const { type, param } = pendingSecureAction;
+            
+            switch(type) {
+                case 'enableAdmin':
+                    enableAdminMode();
+                    break;
+                case 'sync':
+                    // Just legacy trigger if needed, or remove
+                    break;
+            }
+            pendingSecureAction = null;
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
+        }
+        
+        function toggleNotes() {
+            const modal = document.getElementById('notes-modal');
+            if (modal.classList.contains('hidden')) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+
+        // --- 7. DATA SYNC ---
+
+        function saveData() {
+            localStorage.setItem('h2_catalog', JSON.stringify(state.catalog));
+            localStorage.setItem('h2_inventory', JSON.stringify(state.inventory));
+            localStorage.setItem('h2_notes', state.notes);
+        }
+
+        function setupRealtimeListener(appId) {
+             if (!auth.currentUser) return;
+             const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('inventory_data').doc('master');
+             
+             docRef.onSnapshot((doc) => {
+                 if (doc.exists) {
+                     const remoteData = doc.data();
+                     
+                     // PRIORITY: Cloud Catalog overwrites Local Catalog
+                     if (remoteData.catalog && Array.isArray(remoteData.catalog) && remoteData.catalog.length > 0) {
+                         // Simple comparison to avoid loops
+                         if (JSON.stringify(state.catalog) !== JSON.stringify(remoteData.catalog)) {
+                             state.catalog = remoteData.catalog;
+                             renderCatalog();
+                             saveData();
+                             console.log("Catalogue mis à jour depuis le Cloud");
+                         }
+                     } else {
+                         // Seed Cloud if empty
+                         if(state.catalog.length === 0) {
+                             state.catalog = INITIAL_CATALOG;
+                             updateCloudCatalog();
+                         } else if (state.catalog.length > 0 && (!remoteData.catalog || remoteData.catalog.length === 0)) {
+                             updateCloudCatalog();
+                         }
+                     }
+                 } else {
+                     // Doc doesn't exist, seed it
+                     state.catalog = INITIAL_CATALOG;
+                     updateCloudCatalog();
+                 }
+             }, (error) => {
+                 console.error("Listener error:", error);
+                 // Fallback to local
+                 if(state.catalog.length === 0) state.catalog = INITIAL_CATALOG;
+                 renderCatalog();
+             });
+        }
+
+        // --- 8. EVENTS ---
+
+        function setupEventListeners() {
+            // App Access Enter Key
+            document.getElementById('app-access-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') verifyAppAccess();
+            });
+
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                const btn = document.getElementById('clear-search-btn');
+                if(e.target.value.length > 0) btn.classList.remove('hidden');
+                else btn.classList.add('hidden');
+                renderCatalog();
+            });
+
+            document.getElementById('room-selector').addEventListener('change', (e) => {
+                state.currentRoom = e.target.value;
+                renderCatalog();
+            });
+
+            const notepad = document.getElementById('notepad-area');
+            let noteTimeout;
+            notepad.addEventListener('input', (e) => {
+                clearTimeout(noteTimeout);
+                noteTimeout = setTimeout(() => {
+                    state.notes = e.target.value;
+                    saveData();
+                }, 500);
+            });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            const tm = document.getElementById('toast-msg');
+            tm.textContent = msg;
+            t.classList.remove('opacity-0');
+            setTimeout(() => t.classList.add('opacity-0'), 2500);
+        }
+
+        // --- COPY ---
+
+        function copyInventoryToClipboard() {
+            if (state.inventory.length === 0) {
+                showToast("Inventaire vide");
+                return;
+            }
+            let text = "";
+            const grouped = state.inventory.reduce((acc, item) => {
+                acc[item.room] = acc[item.room] || [];
+                acc[item.room].push(item);
+                return acc;
+            }, {});
+            const sortedRooms = Object.keys(grouped).sort();
+            sortedRooms.forEach(room => {
+                text += `${room.toUpperCase()}\n`; 
+                grouped[room].forEach(item => {
+                    text += `${item.name}\t${item.qty}\n`; 
+                });
+                text += "\n"; 
+            });
+            const total = state.inventory.reduce((sum, item) => sum + (item.vol * item.qty), 0);
+            text += `TOTAL:\t${total.toFixed(2)} m³`;
+
+            // --- DÉTAIL CARTONS ---
+            const cartonTypes = ["Carton livre", "Carton penderie", "Carton standard", "Carton vaisselle"];
+            const cartonCounts = {};
+            let hasCartons = false;
+
+            state.inventory.forEach(item => {
+                if (cartonTypes.includes(item.name)) {
+                    cartonCounts[item.name] = (cartonCounts[item.name] || 0) + item.qty;
+                    hasCartons = true;
+                }
+            });
+
+            if (hasCartons) {
+                text += "\n\n--- DÉTAIL CARTONS ---\n";
+                // On affiche uniquement les types présents
+                Object.keys(cartonCounts).sort().forEach(name => {
+                    text += `${name}\t${cartonCounts[name]}\n`;
+                });
+            }
+            // ---------------------
+
+            fallbackCopyText(text, "Inventaire copié");
+        }
+
+        function copyNotes() {
+            const text = document.getElementById('notepad-area').value;
+            fallbackCopyText(text, "Notes copiées");
+        }
+        
+        function fallbackCopyText(text, successMsg) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if(successful) showToast(successMsg);
+                else showToast("Erreur copie");
+            } catch (err) {
+                showToast("Erreur copie");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        window.addEventListener('load', initApp);
+
     </script>
 </body>
 </html>
