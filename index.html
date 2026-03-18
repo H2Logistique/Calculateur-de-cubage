@@ -7,7 +7,7 @@
          CACHE BUSTING — Pour forcer le rechargement chez tous les
          utilisateurs, incrémentez APP_VERSION dans le script JS
          ET modifiez le paramètre ?v= des ressources ci-dessous.
-         Exemple : passer ?v=1.1 en ?v=1.2 à chaque déploiement.
+         Exemple : passer ?v=1.3 en ?v=1.2 à chaque déploiement.
     ============================================================ -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -15,12 +15,12 @@
     <title>Calculateur de Cubage - H2 LOGISTIQUE</title>
     
     <!-- Tailwind CSS — Incrémenter ?v= à chaque mise à jour majeure -->
-    <script src="https://cdn.tailwindcss.com?v=1.1"></script>
+    <script src="https://cdn.tailwindcss.com?v=1.3"></script>
     
     <!-- Firebase SDKs — Incrémenter ?v= à chaque mise à jour majeure -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js?v=1.1"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js?v=1.1"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js?v=1.1"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js?v=1.3"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js?v=1.3"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js?v=1.3"></script>
 
     <style>
         /* Custom Scrollbar */
@@ -355,7 +355,7 @@
 { id: 28, name: "Canapé d'angle", vol: 3.5, cat: "General" },
 { id: 29, name: "Carton livre", vol: 0.05, cat: "General" },
 { id: 30, name: "Carton penderie", vol: 0.25, cat: "General" },
-{ id: 31, name: "Carton standard (plein)", vol: 0.1, cat: "General" },
+{ id: 31, name: "Carton standard", vol: 0.1, cat: "General" },
 { id: 32, name: "Carton vaisselle", vol: 0.1, cat: "General" },
 { id: 33, name: "Chaîne HiFi", vol: 0.5, cat: "General" },
 { id: 34, name: "Chaise de bureau", vol: 0.25, cat: "General" },
@@ -375,8 +375,8 @@
 { id: 48, name: "Congélateur coffre (petit)", vol: 0.5, cat: "General" },
 { id: 49, name: "Console", vol: 0.5, cat: "General" },
 { id: 50, name: "Desserte", vol: 0.3, cat: "General" },
-{ id: 51, name: "Divers / 0,5M3 supplémentaire", vol: 1, cat: "General" },
-{ id: 52, name: "Divers / 1M3 supplémentaire", vol: 0.5, cat: "General" },
+{ id: 51, name: "Divers / 0,5M3 supplémentaire", vol: 0.5, cat: "General" },
+{ id: 52, name: "Divers / 1M3 supplémentaire", vol: 1, cat: "General" },
 { id: 53, name: "Echelle", vol: 0.15, cat: "General" },
 { id: 54, name: "Ecran", vol: 0.2, cat: "General" },
 { id: 55, name: "Etabli", vol: 1, cat: "General" },
@@ -417,7 +417,7 @@
 { id: 90, name: "Meuble TV (grand)", vol: 1.5, cat: "General" },
 { id: 91, name: "Meuble TV (moyen)", vol: 1, cat: "General" },
 { id: 92, name: "Meuble TV (petit)", vol: 0.5, cat: "General" },
-{ id: 93, name: "Micro ondes", vol: 0.3, cat: "General" },
+{ id: 93, name: "Micro ondes", vol: 0.1, cat: "General" },
 { id: 94, name: "Miroir (grand)", vol: 0.3, cat: "General" },
 { id: 95, name: "Miroir (moyen)", vol: 0.2, cat: "General" },
 { id: 96, name: "Miroir (petit)", vol: 0.1, cat: "General" },
@@ -452,7 +452,7 @@
 { id: 125, name: "Table à langer", vol: 1, cat: "General" },
 { id: 126, name: "Table à repasser", vol: 0.15, cat: "General" },
 { id: 127, name: "Table basse (petit)", vol: 0.5, cat: "General" },
-{ id: 128, name: "Table basse", vol: 0.5, cat: "General" },
+{ id: 128, name: "Table basse", vol: 1, cat: "General" },
 { id: 129, name: "Table d'appoint", vol: 0.25, cat: "General" },
 { id: 130, name: "Table de chevet", vol: 0.25, cat: "General" },
 { id: 131, name: "Table Gigogne", vol: 0.25, cat: "General" },
@@ -475,7 +475,9 @@
 { id: 148, name: "Vaisselier (4 porte)", vol: 4, cat: "General" },
 { id: 149, name: "Vase", vol: 0.1, cat: "General" },
 { id: 150, name: "Velo", vol: 0.3, cat: "General" },
-{ id: 151, name: "Portant", vol: 0.3, cat: "General" }
+{ id: 151, name: "Portant", vol: 0.3, cat: "General" },
+{ id: 152, name: "Carton standard (plein)", vol: 0.1, cat: "General" },
+{ id: 153, name: "Valise", vol: 0.15, cat: "General" },
         ];
 
         const DEFAULT_NOTES = ` 
